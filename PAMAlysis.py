@@ -37,7 +37,7 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
     create_Plots = True
     minsize = 25
     maxsize = 100
-    filterMethods = {"SYD":0.35}
+    filterMethods = {"SYD":0.2}
     if(batch):
         fl = os.listdir(fp)
         tifs = [fp+ "/" + file for file in fl if ".tif" in file]
@@ -64,17 +64,17 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
         contimg = cv2.cvtColor(np.zeros_like(mask),cv2.COLOR_GRAY2BGR)
         drawn = cv2.drawContours(contimg,cnts,-1,(0,0,255),-1)
         cv2.imshow("Conts",drawn)
+        print(f"Raw contours found: {len(cnts)}")
         #Remove all contours below a given size
         size_filt_cnts = []
         for cnt in cnts:
             mu = cv2.moments(cnt)
             if(mu['m00'] > minsize and mu['m00'] < maxsize):
                 size_filt_cnts.append(cnt)
-                
+        print(f"Contours remaining filtering with size thresholds: {minsize}-{maxsize} pixels are {len(size_filt_cnts)}")
         #Draw a filtered mask
         filteredMask = cv2.drawContours(cv2.cvtColor(np.zeros_like(mask,dtype=np.uint8),cv2.COLOR_GRAY2BGR),size_filt_cnts,-1,(255,255,255),-1)
-        cv2.imshow("Filtered conts",filteredMask)
-        
+        cv2.imshow("Filtered conts",filteredMask)  
         #Output table
         meanYields = np.zeros(shape=(len(size_filt_cnts),len(yields)+1))
         for cellidx, cnt in enumerate(size_filt_cnts):
@@ -83,14 +83,14 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
             cellMinis = yields[:,rect[1]:rect[1]+rect[3],rect[0]:rect[0]+rect[2]]
             filteredMask = cv2.putText(filteredMask,str(cellidx), (rect[0],rect[1]+int(rect[3]/2)), cv2.FONT_HERSHEY_PLAIN, 0.5,(0,255,0),thickness = 1)
             for timeidx,img in enumerate(cellMinis):                   
-                meanYield = np.nanmean(np.where(img!=0,img,np.nan))   
+                meanYield = np.nanmean(np.where(img!=0,img,np.nan))  
                 if(timeidx == 0):
                     meanYields[cellidx,0] = int(cellidx)
                 meanYields[cellidx,timeidx+1] = meanYield  
         
         #THRESHOLD FILTER
         filteredYields = filter_Yields(meanYields, filterMethods)
-        
+        print(f"Yields remaining after filter: {len(filteredYields)}")
         cv2.imshow("Numbered masks",filteredMask)
         cv2.imwrite('Output/' + work_name + '_' + fn + "numbered masks.tif", filteredMask)       
         #cv2.imshow("Cell_mini", cell_minis[np.random.randint(low=0,high=len(cell_minis))])
@@ -101,43 +101,42 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
             
         if(create_Plots):
             subs, names = subdivide_Yield(filteredYields[:,1:], disc_pos = 1)
-            plot_Values(subs,names,[0.0])
+            print(f"{len(subs)}")
+            plot_Values(subs,names)
     
-def plot_Values(yields, names, ylim, intervall = 5, rows = -1, columns = -1):
+def plot_Values(yields, names, intervall = 5, rows = -1, columns = -1):
     #Assumes that yields is formatted as yields.shape = [n(subplots),n(samples),n(values)]
     if(rows == -1 or columns == -1):
-        popidxs = []
-        for i in range(len(names)):
-            if (len(yields[i]) > 0):
-                popidxs.append(i)
-                #Subpopulation is not, plot.
+        tot = len(names)
+        popidxs = range(tot)
         columns = int(len(popidxs)/2)
-        rows = max(1,columns%3)
-        
-    iterator = iter(popidxs)
+        #rows = min(columns,columns%3)
+        rows = tot // columns 
+        rows += tot % columns
+    
+    
     avg_lines = []
-    fig,axs = plt.subplots(rows,columns, sharey = 'all',sharex='all', figsize=(5*columns, 4*rows))
-    if(rows > 1):
-        for row in axs:    
-            for col in row:
-                idx = next(iterator)
-                avg_line = (np.mean(yields[idx][:],axis=0))
-                print(avg_line)
-                avg_lines.append(avg_line)
-                for part in yields[idx]:
-                    col.plot(range(0,len(yields[idx][0])*intervall,intervall),part)
-                col.title.set_text(names[idx])
-    else:
-        for row in axs: 
-            idx = next(iterator)
-            avg_lines.append(np.mean(yields[idx][:],axis=0))
-            row.plot(range(0,len(yields[idx][0])*intervall,intervall),yields[idx][:][:])
-            row.title.set_text(names[idx]) 
+    xlim =[0,len(yields[0][0])*intervall]
+    ylim = [0,0.8]
+    Position = range(1,tot + 1)
+    fig = plt.figure(1, figsize=(4*rows, 5*columns))
+    for k in range(tot):
+        # add every single subplot to the figure with a for loop
+        ax = fig.add_subplot(rows,columns,Position[k])
+        ax.set_ylim(ylim)
+        ax.set_xlim(xlim)
+        avg_line = (np.mean(yields[k][:],axis=0))
+        print(avg_line)
+        avg_lines.append(avg_line)
+        for part in yields[k]:
+            ax.plot(range(xlim[0],xlim[1],intervall),part, marker='o', markersize = 3, linewidth = 0.5)
     
     fig2 = plt.figure("Average Yield", figsize=(6,3))
     fig2.suptitle("Average Yield")              
     for avgs in avg_lines:
-        plt.plot(range(0,len(avgs)*intervall,intervall),avgs)
+        plt.plot(range(xlim[0],xlim[1],intervall),avgs)
+        plt.xlim(xlim)
+        plt.ylim(ylim)
     #1 big plot of just means
     #figure of subplots with subpopulation datapoints compared to all means 
         
@@ -154,9 +153,12 @@ def filter_Yields(cellyields, meths):
     for idx,cell in enumerate(cellyields):
         if(SYD):
           for time in range(1,len(cell)-1):
-                  if(abs(cell[time]-cell[time+1]) > sydthres):
+                  if(cell[time]-cell[time+1] > sydthres):
                      #Remove, likely fell away
-                     remidxs.add(idx)
+                      #Tail function so we don't remove on single frame brightness
+                      if(time+2 <= len(cell)-2):
+                          if(cell[time+3] <= cell[time]):
+                              remidxs.add(idx)
     outputmsg += f"Filtered: {len(remidxs)} based on threshold: {sydthres}"
     print(outputmsg)
     return np.delete(cellyields,list(remidxs),axis=0)
@@ -180,8 +182,12 @@ def subdivide_Yield(cellyields, method = "Static Bins",threshold_size = 0.1, dis
             for cell in cellyields:
                 if(idx*threshold_size < cell[disc_pos] and cell[disc_pos] <= (idx+1)*threshold_size):          
                     temp.append(cell)
-            subpops.append(temp)
-            names.append(f"Subpopulation: {idx}. Static threshold: {(idx*threshold_size):.3f}-{((idx+1)*threshold_size):.3f}")          
+            #Else it is empty
+            if(len(temp) > 0):
+                subpops.append(temp)
+                name = f"Subpopulation: {idx}. Static threshold: {(idx*threshold_size):.3f}-{((idx+1)*threshold_size):.3f}"
+                print(name + f" {len(temp)}")
+                names.append(name)          
     if(method == "Distribution"):
         #Create equally sized populations
         subs = len(cellyields)*threshold_size
