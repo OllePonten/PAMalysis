@@ -304,7 +304,8 @@ if __name__ == '__main__':
     fp = ""
     job_name = ""
     args = sys.argv[1:]
-    if("/help" or "/h" in args):
+    print("Args:" + str(args))
+    if("/help" or "/h" or len(args)== 0 in args):
         print("This is the PAMalysis software which computes quantum yields of tiffstacks output"
               + " from ImagingWinGigE v2.51d.\n")
         print("Following options are available:\n")
@@ -313,6 +314,8 @@ if __name__ == '__main__':
         print("[/file /f] Only useable if batch mode is not on. Analyses a single stack. \n")
         print("[/job /j] Sets the output folder name. \n")
         print("Made by Olle Pontén, Uppsala University, 2021")
+        input("Press key to exit")
+        sys.exit()
     if ("/Batch" in args or "/batch" in args or "/b" in args):
         batch_flag = True
         if("/dir" or "/d" in args):
@@ -323,22 +326,21 @@ if __name__ == '__main__':
                     findex = args.index("/d") + 1     
                 except:
                     input("No directory flag found. Enter key to exit")
-                    exit()
+                    sys.exit()
             fp = args[findex]
         else:
             #Assume we are just grabbing all tif stacks in current folder
             fp = str(pathlib.Path().absolute())
-    else:
-         if("/file" or "/f" in args):
+    if("/file" in args or "/f" in args):
+        try:
+            findex = args.index("/file") + 1
+        except ValueError:
             try:
-                findex = args.index("/file") + 1
-            except ValueError:
-                try:
-                    findex = args.index("/f") + 1     
-                except:
-                    input("No filename flag found. Enter key to exit")
-                    exit()
-            fp = args[findex]
+                findex = args.index("/f") + 1     
+            except:
+                input("No filename flag found. Enter key to exit")
+                sys.exit()
+        fp = args[findex]
     try:
         jindex = args.index("/job") + 1
     except ValueError:
@@ -346,7 +348,7 @@ if __name__ == '__main__':
             jindex = args.index("/j") + 1
         except:
             input("No jobname found. Enter key to exit")
-            sys.quit()
+            sys.exit()
         job_name = args[jindex]
     perform_Analysis(fp,job_name, batch = batch_flag)
     
