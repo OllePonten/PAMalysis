@@ -12,7 +12,7 @@ import cv2
 import os
 import csv   
 import pathlib
-
+import warnings
 
 
 def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projection"):
@@ -32,11 +32,15 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
     None.
 
     """
+    
     cv2.destroyAllWindows()
     tifs = []
+    border = 100
     create_Plots = True
     minsize = 25
     maxsize = 100
+    subpopthreshold_size = 0.2
+    subpopfloor = 0
     filterMethods = {"SYD":0.2}
     if(batch):
         fl = os.listdir(fp)
@@ -53,8 +57,16 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
         else:
             fn = i
         tif = cv2.imreadmulti(i)[1]
-        #Remove first 4 images         
-        yields = make_Yield_Images(tif[4:])
+        tif = tif[4:]
+        #Remove first 4 images     
+        imgwidth = 640
+        imgheight = 480
+        if(border > 0):
+            yields = [frame[border:imgheight-border,border*2:imgwidth-border*2]for frame in tif]
+            yields = yields[4:]
+            yields = make_Yield_Images(yields)
+        else:
+            yields = make_Yield_Images(tif[4:])
         cv2.imshow("Random yield image", np.asarray(yields[np.random.randint(low=1,high=len(yields))]*255,dtype=np.uint8))
         mask = 0
         if("Projection" in AOI_mode):
@@ -77,15 +89,22 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
         cv2.imshow("Filtered conts",filteredMask)  
         #Output table
         meanYields = np.zeros(shape=(len(size_filt_cnts),len(yields)+1))
+        #np.seterr(all='raise')
         for cellidx, cnt in enumerate(size_filt_cnts):
             #Get minimum bounding rect
             rect = cv2.boundingRect(cnt)
             cellMinis = yields[:,rect[1]:rect[1]+rect[3],rect[0]:rect[0]+rect[2]]
             filteredMask = cv2.putText(filteredMask,str(cellidx), (rect[0],rect[1]+int(rect[3]/2)), cv2.FONT_HERSHEY_PLAIN, 0.5,(0,255,0),thickness = 1)
-            for timeidx,img in enumerate(cellMinis):                   
-                meanYield = np.nanmean(np.where(img!=0,img,np.nan))  
-                if(timeidx == 0):
-                    meanYields[cellidx,0] = int(cellidx)
+            for timeidx,img in enumerate(cellMinis):  
+                with warnings.catch_warnings():
+                    warnings.filterwarnings('error')
+                    try:
+                        meanYield = np.nanmean(np.where(img!=0,img,np.nan))  
+                    except Warning as e:
+                        print(f"Nan/Zero yield enc. Timeindex: {timeidx}. Cellindex: {cellidx}. Setting zero")
+                        meanYield = 0
+                    if(timeidx == 0):
+                        meanYields[cellidx,0] = int(cellidx)
                 meanYields[cellidx,timeidx+1] = meanYield  
         
         #THRESHOLD FILTER
@@ -100,16 +119,26 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
                 yield_writer.writerow(part)
             
         if(create_Plots):
-            subs, names = subdivide_Yield(filteredYields[:,1:], disc_pos = 1)
+            subs, names = subdivide_Yield(filteredYields[:,1:], threshold_size = subpopthreshold_size, disc_pos = 1)
             print(f"{len(subs)}")
             plot_Values(subs,names)
+        #For outside use, return our filtered yields
+        return filteredYields
+    
+def reanalyze(yields, indexes):
+    #If you want to reanalyze only specific numbered cells.
+    manFilteredYields = [part for part in yields if part[0] in indexes]
+    return manFilteredYields
     
 def plot_Values(yields, names, intervall = 5, rows = -1, columns = -1):
     #Assumes that yields is formatted as yields.shape = [n(subplots),n(samples),n(values)]
+    tot = len(names)
+    if(tot == 1):
+        #Only one dataset.
+        columns = 1
+        rows = 1
     if(rows == -1 or columns == -1):
-        tot = len(names)
-        popidxs = range(tot)
-        columns = int(len(popidxs)/2)
+        columns = int(tot/2)
         #rows = min(columns,columns%3)
         rows = tot // columns 
         rows += tot % columns
@@ -123,6 +152,9 @@ def plot_Values(yields, names, intervall = 5, rows = -1, columns = -1):
     for k in range(tot):
         # add every single subplot to the figure with a for loop
         ax = fig.add_subplot(rows,columns,Position[k])
+        ax.set_title(names[k])
+        ax.set_ylabel("Yield")
+        ax.set_xlabel("Minutes")
         ax.set_ylim(ylim)
         ax.set_xlim(xlim)
         avg_line = (np.mean(yields[k][:],axis=0))
@@ -130,6 +162,7 @@ def plot_Values(yields, names, intervall = 5, rows = -1, columns = -1):
         avg_lines.append(avg_line)
         for part in yields[k]:
             ax.plot(range(xlim[0],xlim[1],intervall),part, marker='o', markersize = 3, linewidth = 0.5)
+        fig.tight_layout(pad = 3.0)
     
     fig2 = plt.figure("Average Yield", figsize=(6,3))
     fig2.suptitle("Average Yield")              
@@ -163,7 +196,7 @@ def filter_Yields(cellyields, meths):
     print(outputmsg)
     return np.delete(cellyields,list(remidxs),axis=0)
               
-def subdivide_Yield(cellyields, method = "Static Bins",threshold_size = 0.1, disc_pos = 1):
+def subdivide_Yield(cellyields, method = "Static Bins",floor = 0, threshold_size = 0.1, disc_pos = 1):
     #Several modes for finding subpopulations
     #Static Value = Divides up in subpopulations based on the yield value in disc pos 
     #using static bins of threshold_size
@@ -173,30 +206,29 @@ def subdivide_Yield(cellyields, method = "Static Bins",threshold_size = 0.1, dis
     subpops = []  
     names = []
     if(method == "Static Bins"):
-        subs = int(1/threshold_size)
+        subs = int((1-floor)/threshold_size)
         #We can't know the sizes of the populations from the start
-        #subpops = np.zeros(shape = (subs,cellyields.shape[0],cellyields.shape[1]))
         subpops = []
         for idx in range(0,subs):
             temp = []
             for cell in cellyields:
-                if(idx*threshold_size < cell[disc_pos] and cell[disc_pos] <= (idx+1)*threshold_size):          
+                if(floor + (idx*threshold_size)) < cell[disc_pos] and cell[disc_pos] <= (floor+((idx+1)*threshold_size)):          
                     temp.append(cell)
             #Else it is empty
             if(len(temp) > 0):
                 subpops.append(temp)
-                name = f"Subpopulation: {idx}. Static threshold: {(idx*threshold_size):.3f}-{((idx+1)*threshold_size):.3f}"
+                name = f"Subpopulation: {idx}, size: {len(temp)}. Static threshold: {(floor + (idx*threshold_size)):.3f}-{(floor+((idx+1)*threshold_size)):.3f}"
                 print(name + f" {len(temp)}")
                 names.append(name)          
     if(method == "Distribution"):
         #Create equally sized populations
         subs = len(cellyields)*threshold_size
         #We can know the sizes of the populations from the start.
-        subpops = np.nan(shape = (1/threshold_size,subs,cellyields.shape[2]))
+        subpops = np.nan(shape = int(1/threshold_size,subs,cellyields.shape[2]))
         #Sort based on disc_pos value
         ntile_size = len(cellyields*threshold_size)
         cellyields[cellyields[:,disc_pos].argsort()]
-        for idx in range(0,10):
+        for idx in range(0,int(1/threshold_size)):
             #Grab percentile between idx to idx + threshold            
             subpops[idx] = cellyields[idx*ntile_size:(idx+1)*ntile_size]
             names.append(f"Subpopulation: {idx}. Percentage range: {idx*10}-{(idx+1)*10}")
