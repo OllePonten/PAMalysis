@@ -9,6 +9,7 @@ import sys
 import numpy as np
 import matplotlib.pyplot as plt
 import cv2
+import tifffile
 import os
 import csv   
 import pathlib
@@ -35,11 +36,11 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
     
     cv2.destroyAllWindows()
     tifs = []
-    border = 100
+    border = 25
     create_Plots = True
-    minsize = 25
+    minsize = 20
     maxsize = 100
-    subpopthreshold_size = 0.2
+    subpopthreshold_size = 0.3
     subpopfloor = 0
     filterMethods = {"SYD":0.2}
     if(batch):
@@ -53,10 +54,13 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
         print("Could not create output folder")
     for idx, i in enumerate(tifs):
         if('/' in i):
-            fn = i.split('/')[-1][:-3]
+            fn = i.split('/')[-1][:-4]
         else:
             fn = i
-        tif = cv2.imreadmulti(i)[1]
+        (succ,tif) = cv2.imreadmulti(i)
+        if(not succ):
+            input(f"Could not load image: {fn} Please check filename")
+            sys.exit()
         tif = tif[4:]
         #Remove first 4 images     
         imgwidth = 640
@@ -68,6 +72,7 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
         else:
             yields = make_Yield_Images(tif[4:])
         cv2.imshow("Random yield image", np.asarray(yields[np.random.randint(low=1,high=len(yields))]*255,dtype=np.uint8))
+        tifffile.imwrite('Output/' + f"Yields_{work_name}_{fn}.tif",data = (yields[:]*255))
         mask = 0
         if("Projection" in AOI_mode):
             mask = create_Masks(yields)
@@ -113,7 +118,7 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
         cv2.imshow("Numbered masks",filteredMask)
         cv2.imwrite('Output/' + work_name + '_' + fn + "numbered masks.tif", filteredMask)       
         #cv2.imshow("Cell_mini", cell_minis[np.random.randint(low=0,high=len(cell_minis))])
-        with open('Output/' + work_name +'_'+ fn + 'csv', mode = 'w',newline="") as pos_file:
+        with open('Output/' + work_name +'_'+ fn + '.csv', mode = 'w',newline="") as pos_file:
             yield_writer = csv.writer(pos_file, delimiter = ",",quotechar = '"', quoting = csv.QUOTE_MINIMAL)
             for idx,part in enumerate(filteredYields):
                 yield_writer.writerow(part)
@@ -121,7 +126,7 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
         if(create_Plots):
             subs, names = subdivide_Yield(filteredYields[:,1:], threshold_size = subpopthreshold_size, disc_pos = 1)
             print(f"{len(subs)}")
-            plot_Values(subs,names)
+            plot_Values(subs,names, work_name)
         #For outside use, return our filtered yields
         return filteredYields
     
@@ -130,7 +135,7 @@ def reanalyze(yields, indexes):
     manFilteredYields = [part for part in yields if part[0] in indexes]
     return manFilteredYields
     
-def plot_Values(yields, names, intervall = 5, rows = -1, columns = -1):
+def plot_Values(yields, names, jobname, intervall = 5, rows = -1, columns = -1):
     #Assumes that yields is formatted as yields.shape = [n(subplots),n(samples),n(values)]
     tot = len(names)
     if(tot == 1):
@@ -148,7 +153,10 @@ def plot_Values(yields, names, intervall = 5, rows = -1, columns = -1):
     xlim =[0,len(yields[0][0])*intervall]
     ylim = [0,0.8]
     Position = range(1,tot + 1)
-    fig = plt.figure(1, figsize=(4*rows, 5*columns))
+    #fig = plt.figure(figsize=(5*rows, 3*columns))
+    plt.close(f"{jobname}: Subpopulations")
+    fig = plt.figure(f"{jobname}: Subpopulations")
+    fig.suptitle("Subpopulations")
     for k in range(tot):
         # add every single subplot to the figure with a for loop
         ax = fig.add_subplot(rows,columns,Position[k])
@@ -162,9 +170,10 @@ def plot_Values(yields, names, intervall = 5, rows = -1, columns = -1):
         avg_lines.append(avg_line)
         for part in yields[k]:
             ax.plot(range(xlim[0],xlim[1],intervall),part, marker='o', markersize = 3, linewidth = 0.5)
-        fig.tight_layout(pad = 3.0)
+    fig.tight_layout(pad = 3.0)
     
-    fig2 = plt.figure("Average Yield", figsize=(6,3))
+    plt.close(f"{jobname}: Average_Yield")
+    fig2 = plt.figure(f"{jobname}: Average_Yield", figsize=(6,3))
     fig2.suptitle("Average Yield")              
     for avgs in avg_lines:
         plt.plot(range(xlim[0],xlim[1],intervall),avgs)
@@ -254,7 +263,7 @@ def make_Yield_Images(img_stack):
     #Yield is defined as Fv/Fm or (Fm-Fo)/Fm
     Yield = []
     for i in range(len(Fo)):
-        Mask = np.where(Fo[i] > 8,1,0)
+        Mask = np.where(Fo[i] > 12,1,0)
         Fv = np.subtract(Fm[i],Fo[i],dtype = np.float32)
         #Floor to zero
         Fv = np.clip(Fv,0,255)*Mask
@@ -262,7 +271,7 @@ def make_Yield_Images(img_stack):
         Yield.append(cYield)
     return np.asarray(Yield)
     
-def create_Masks(imgstack, maskthres = 20):
+def create_Masks(imgstack, maskthres = 30):
     """
     Creates masks based on z-projection of yield values and a thresholding operation
 
@@ -278,7 +287,7 @@ def create_Masks(imgstack, maskthres = 20):
     """
     summed = np.sum(imgstack,axis = 0) 
     #summed = np.asarray(summed,dtype=np.uint32)
-    #Only keep pixels as part of a cell if they have an average of 1 pixel
+    #Only keep pixels as part of a cell if they have an average of threshold pixel
     #intensity over the entire stack, i.e. the length of the stack.
     threshold = imgstack.shape[0]/maskthres
     #Simple threshold
@@ -298,14 +307,15 @@ def template_matching():
     #Return binary mask of interest
     return 0
 
-
+global data
 if __name__ == '__main__':
+    global data
     batch_flag = False
     fp = ""
     job_name = ""
     args = sys.argv[1:]
     print("Args:" + str(args))
-    if("/help" or "/h" or len(args)== 0 in args):
+    if("/help" in args or "/h" in args or len(args)== 0 ):
         print("This is the PAMalysis software which computes quantum yields of tiffstacks output"
               + " from ImagingWinGigE v2.51d.\n")
         print("Following options are available:\n")
@@ -350,7 +360,7 @@ if __name__ == '__main__':
             input("No jobname found. Enter key to exit")
             sys.exit()
         job_name = args[jindex]
-    perform_Analysis(fp,job_name, batch = batch_flag)
+    data = perform_Analysis(fp,job_name, batch = batch_flag)
     
     
 def cleanup():
