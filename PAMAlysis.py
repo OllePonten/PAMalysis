@@ -38,10 +38,11 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
     tifs = []
     border = 25
     create_Plots = True
-    minsize = 20
-    maxsize = 100
-    subpopthreshold_size = 0.3
-    subpopfloor = 0
+    minsize = 12
+    maxsize = 75
+    subpopthreshold_size = 0.2
+    subpopfloor = 0.2
+    outYields = dict()
     filterMethods = {"SYD":0.2}
     if(batch):
         fl = os.listdir(fp)
@@ -61,6 +62,7 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
         if(not succ):
             input(f"Could not load image: {fn} Please check filename")
             sys.exit()
+        print(f"{fn}")
         tif = tif[4:]
         #Remove first 4 images     
         imgwidth = 640
@@ -72,10 +74,10 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
         else:
             yields = make_Yield_Images(tif[4:])
         cv2.imshow("Random yield image", np.asarray(yields[np.random.randint(low=1,high=len(yields))]*255,dtype=np.uint8))
-        tifffile.imwrite('Output/' + f"Yields_{work_name}_{fn}.tif",data = (yields[:]*255))
+        tifffile.imwrite('Output/' + f"Yields_{work_name}_{fn}.tif",data = (yields[:]*255),dtype='uint8')
         mask = 0
         if("Projection" in AOI_mode):
-            mask = create_Masks(yields)
+            mask = create_Masks(yields, 0.02)
             cv2.imshow("Mask",mask)
         cnts,hrs = cv2.findContours(mask,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
         contimg = cv2.cvtColor(np.zeros_like(mask),cv2.COLOR_GRAY2BGR)
@@ -105,7 +107,7 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
                     warnings.filterwarnings('error')
                     try:
                         meanYield = np.nanmean(np.where(img!=0,img,np.nan))  
-                    except Warning as e:
+                    except Warning:
                         print(f"Nan/Zero yield enc. Timeindex: {timeidx}. Cellindex: {cellidx}. Setting zero")
                         meanYield = 0
                     if(timeidx == 0):
@@ -124,11 +126,12 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
                 yield_writer.writerow(part)
             
         if(create_Plots):
-            subs, names = subdivide_Yield(filteredYields[:,1:], threshold_size = subpopthreshold_size, disc_pos = 1)
+            subs, names = subdivide_Yield(filteredYields[:,1:], threshold_size = subpopthreshold_size, disc_pos = 1,floor = subpopfloor)
             print(f"{len(subs)}")
             plot_Values(subs,names, work_name)
         #For outside use, return our filtered yields
-        return filteredYields
+        outYields[f"{fn}"] = filteredYields
+    return outYields
     
 def reanalyze(yields, indexes):
     #If you want to reanalyze only specific numbered cells.
@@ -166,19 +169,19 @@ def plot_Values(yields, names, jobname, intervall = 5, rows = -1, columns = -1):
         ax.set_ylim(ylim)
         ax.set_xlim(xlim)
         avg_line = (np.mean(yields[k][:],axis=0))
-        print(avg_line)
         avg_lines.append(avg_line)
         for part in yields[k]:
             ax.plot(range(xlim[0],xlim[1],intervall),part, marker='o', markersize = 3, linewidth = 0.5)
     fig.tight_layout(pad = 3.0)
     
-    plt.close(f"{jobname}: Average_Yield")
+    #plt.close(f"{jobname}: Average_Yield")
     fig2 = plt.figure(f"{jobname}: Average_Yield", figsize=(6,3))
     fig2.suptitle("Average Yield")              
     for avgs in avg_lines:
         plt.plot(range(xlim[0],xlim[1],intervall),avgs)
         plt.xlim(xlim)
         plt.ylim(ylim)
+        plt.title(f"{jobname}")
     #1 big plot of just means
     #figure of subplots with subpopulation datapoints compared to all means 
         
@@ -263,7 +266,9 @@ def make_Yield_Images(img_stack):
     #Yield is defined as Fv/Fm or (Fm-Fo)/Fm
     Yield = []
     for i in range(len(Fo)):
-        Mask = np.where(Fo[i] > 12,1,0)
+        Mask = np.where(Fo[i] > 10,1,0)
+        #Emulate remove outliers from imageJ (Which is just a median filter)
+        Mask = cv2.medianBlur()
         Fv = np.subtract(Fm[i],Fo[i],dtype = np.float32)
         #Floor to zero
         Fv = np.clip(Fv,0,255)*Mask
@@ -271,7 +276,7 @@ def make_Yield_Images(img_stack):
         Yield.append(cYield)
     return np.asarray(Yield)
     
-def create_Masks(imgstack, maskthres = 30):
+def create_Masks(imgstack, maskthres = 0.01):
     """
     Creates masks based on z-projection of yield values and a thresholding operation
 
@@ -289,7 +294,7 @@ def create_Masks(imgstack, maskthres = 30):
     #summed = np.asarray(summed,dtype=np.uint32)
     #Only keep pixels as part of a cell if they have an average of threshold pixel
     #intensity over the entire stack, i.e. the length of the stack.
-    threshold = imgstack.shape[0]/maskthres
+    threshold = imgstack.shape[0]*maskthres
     #Simple threshold
     summed[summed <= threshold] = 0
     summed = summed.astype(np.uint8)
@@ -328,7 +333,7 @@ if __name__ == '__main__':
         sys.exit()
     if ("/Batch" in args or "/batch" in args or "/b" in args):
         batch_flag = True
-        if("/dir" or "/d" in args):
+        if("/dir" in args or "/d" in args):
             try:
                 findex = args.index("/dir") + 1
             except ValueError:
