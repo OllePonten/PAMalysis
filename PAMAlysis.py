@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #!/usr/bin/python
 """
-Created on Fri May  7 13:36:59 2021
+Created on Fri May 7 13:36:59 2021
 Software for analysing tiff image stacks created by pacman
 @author: Olle
 """
@@ -15,10 +15,8 @@ import csv
 import pathlib
 import warnings
 
-
 def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projection"):
     """
-    
 
     Parameters
     ----------
@@ -44,9 +42,12 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
     subpopfloor = 0.2
     outYields = dict()
     filterMethods = {"SYD":0.2}
-    if(batch):
+    outYields = dict()
+    if(batch):      
         fl = os.listdir(fp)
         tifs = [fp+ "/" + file for file in fl if ".tif" in file]
+        print("Running batch mode")
+        print(f"With: {str(tifs)}")
     else:
         tifs = [fp]
     try:
@@ -106,12 +107,16 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
                 with warnings.catch_warnings():
                     warnings.filterwarnings('error')
                     try:
+                        #First we make all zeros into np.nan Np.nanmean then allows us to sum
+                        #only over nonnan numbers, giving an accurate average yield
+                        #We do this within warnings to catch completely nan-filled areas
+                        #(Likely cells who have wandered off)
                         meanYield = np.nanmean(np.where(img!=0,img,np.nan))  
                     except Warning:
                         print(f"Nan/Zero yield enc. Timeindex: {timeidx}. Cellindex: {cellidx}. Setting zero")
                         meanYield = 0
                     if(timeidx == 0):
-                        meanYields[cellidx,0] = int(cellidx)
+                        meanYields[cellidx,0] = cellidx
                 meanYields[cellidx,timeidx+1] = meanYield  
         
         #THRESHOLD FILTER
@@ -150,7 +155,6 @@ def plot_Values(yields, names, jobname, intervall = 5, rows = -1, columns = -1):
         #rows = min(columns,columns%3)
         rows = tot // columns 
         rows += tot % columns
-    
     
     avg_lines = []
     xlim =[0,len(yields[0][0])*intervall]
@@ -243,11 +247,9 @@ def subdivide_Yield(cellyields, method = "Static Bins",floor = 0, threshold_size
         for idx in range(0,int(1/threshold_size)):
             #Grab percentile between idx to idx + threshold            
             subpops[idx] = cellyields[idx*ntile_size:(idx+1)*ntile_size]
-            names.append(f"Subpopulation: {idx}. Percentage range: {idx*10}-{(idx+1)*10}")
-           
+            names.append(f"Subpopulation: {idx}. Percentage range: {idx*10}-{(idx+1)*10}")     
     return subpops, names
-    
-    
+     
 def make_Yield_Images(img_stack):
     """
     Parameters
@@ -320,7 +322,7 @@ if __name__ == '__main__':
     job_name = ""
     args = sys.argv[1:]
     print("Args:" + str(args))
-    if("/help" in args or "/h" in args or len(args)== 0 ):
+    if("/help" in args or "/h" in args or len(args)== 0 in args):
         print("This is the PAMalysis software which computes quantum yields of tiffstacks output"
               + " from ImagingWinGigE v2.51d.\n")
         print("Following options are available:\n")
@@ -346,7 +348,7 @@ if __name__ == '__main__':
         else:
             #Assume we are just grabbing all tif stacks in current folder
             fp = str(pathlib.Path().absolute())
-    if("/file" in args or "/f" in args):
+    elif("/file" in args or "/f" in args):
         try:
             findex = args.index("/file") + 1
         except ValueError:
@@ -366,7 +368,6 @@ if __name__ == '__main__':
             sys.exit()
         job_name = args[jindex]
     data = perform_Analysis(fp,job_name, batch = batch_flag)
-    
     
 def cleanup():
     import cv2
