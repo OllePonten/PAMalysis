@@ -36,11 +36,10 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
     tifs = []
     border = 25
     create_Plots = True
-    minsize = 12
-    maxsize = 75
+    minsize = 10
+    maxsize = 80
     subpopthreshold_size = 0.2
     subpopfloor = 0.2
-    outYields = dict()
     filterMethods = {"SYD":0.2}
     outYields = dict()
     if(batch):      
@@ -128,12 +127,11 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
         with open('Output/' + work_name +'_'+ fn + '.csv', mode = 'w',newline="") as pos_file:
             yield_writer = csv.writer(pos_file, delimiter = ",",quotechar = '"', quoting = csv.QUOTE_MINIMAL)
             for idx,part in enumerate(filteredYields):
-                yield_writer.writerow(part)
-            
+                yield_writer.writerow(part)     
         if(create_Plots):
             subs, names = subdivide_Yield(filteredYields[:,1:], threshold_size = subpopthreshold_size, disc_pos = 1,floor = subpopfloor)
             print(f"{len(subs)}")
-            plot_Values(subs,names, work_name)
+            plot_Values(subs,names, work_name, fn)
         #For outside use, return our filtered yields
         outYields[f"{fn}"] = filteredYields
     return outYields
@@ -143,7 +141,7 @@ def reanalyze(yields, indexes):
     manFilteredYields = [part for part in yields if part[0] in indexes]
     return manFilteredYields
     
-def plot_Values(yields, names, jobname, intervall = 5, rows = -1, columns = -1):
+def plot_Values(yields, names, jobname, filename, intervall = 5, rows = -1, columns = -1):
     #Assumes that yields is formatted as yields.shape = [n(subplots),n(samples),n(values)]
     tot = len(names)
     if(tot == 1):
@@ -152,7 +150,6 @@ def plot_Values(yields, names, jobname, intervall = 5, rows = -1, columns = -1):
         rows = 1
     if(rows == -1 or columns == -1):
         columns = int(tot/2)
-        #rows = min(columns,columns%3)
         rows = tot // columns 
         rows += tot % columns
     
@@ -182,10 +179,13 @@ def plot_Values(yields, names, jobname, intervall = 5, rows = -1, columns = -1):
     fig2 = plt.figure(f"{jobname}: Average_Yield", figsize=(6,3))
     fig2.suptitle("Average Yield")              
     for avgs in avg_lines:
-        plt.plot(range(xlim[0],xlim[1],intervall),avgs)
+        plt.plot(range(xlim[0],xlim[1],intervall),avgs, label=f"{filename}")
         plt.xlim(xlim)
         plt.ylim(ylim)
         plt.title(f"{jobname}")
+        plt.legend()
+    fig2.tight_layout(pad=3.0)
+    fig2.savefig(fname = f"Output/{jobname}_Average_Yields")
     #1 big plot of just means
     #figure of subplots with subpopulation datapoints compared to all means 
         
@@ -268,9 +268,10 @@ def make_Yield_Images(img_stack):
     #Yield is defined as Fv/Fm or (Fm-Fo)/Fm
     Yield = []
     for i in range(len(Fo)):
-        Mask = np.where(Fo[i] > 10,1,0)
+        Mask = np.where(Fo[i] > 9,1,0)
         #Emulate remove outliers from imageJ (Which is just a median filter)
-        Mask = cv2.medianBlur()
+        #Mask = Mask.astype(np.uint8)        
+        #Mask = cv2.bilateralFilter(Mask,2,3,3)
         Fv = np.subtract(Fm[i],Fo[i],dtype = np.float32)
         #Floor to zero
         Fv = np.clip(Fv,0,255)*Mask
