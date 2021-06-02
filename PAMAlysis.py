@@ -38,8 +38,8 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
     create_Plots = True
     minsize = 10
     maxsize = 80
-    subpopthreshold_size = 0.2
-    subpopfloor = 0.2
+    subpopthreshold_size = 0.3
+    subpopfloor = 0
     filterMethods = {"SYD":0.2}
     outYields = dict()
     if(batch):      
@@ -154,6 +154,7 @@ def plot_Values(yields, names, jobname, filename, intervall = 5, rows = -1, colu
         rows += tot % columns
     
     avg_lines = []
+    avg_sizes = []
     xlim =[0,len(yields[0][0])*intervall]
     ylim = [0,0.8]
     Position = range(1,tot + 1)
@@ -170,20 +171,22 @@ def plot_Values(yields, names, jobname, filename, intervall = 5, rows = -1, colu
         ax.set_ylim(ylim)
         ax.set_xlim(xlim)
         avg_line = (np.mean(yields[k][:],axis=0))
+        pop_size = len(yields[k][:])
         avg_lines.append(avg_line)
+        avg_sizes.append(pop_size)
         for part in yields[k]:
             ax.plot(range(xlim[0],xlim[1],intervall),part, marker='o', markersize = 3, linewidth = 0.5)
     fig.tight_layout(pad = 3.0)
     
     #plt.close(f"{jobname}: Average_Yield")
-    fig2 = plt.figure(f"{jobname}: Average_Yield", figsize=(6,3))
+    fig2 = plt.figure(f"{jobname}: Average_Yield", figsize=(6,6))
     fig2.suptitle("Average Yield")              
-    for avgs in avg_lines:
-        plt.plot(range(xlim[0],xlim[1],intervall),avgs, label=f"{filename}")
+    for idx, avgs in enumerate(avg_lines):
+        plt.plot(range(xlim[0],xlim[1],intervall),avgs, label=f"{filename} Sample size: {avg_sizes[idx]}")
         plt.xlim(xlim)
         plt.ylim(ylim)
         plt.title(f"{jobname}")
-        plt.legend()
+    plt.legend()
     fig2.tight_layout(pad=3.0)
     fig2.savefig(fname = f"Output/{jobname}_Average_Yields")
     #1 big plot of just means
