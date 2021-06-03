@@ -34,13 +34,19 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
     
     cv2.destroyAllWindows()
     tifs = []
+    AOI = []
     border = 25
     create_Plots = True
-    minsize = 10
-    maxsize = 80
-    subpopthreshold_size = 0.3
+    minsize = 15
+    maxsize = 90
+    subpopthreshold_size = 0.2
     subpopfloor = 0
     filterMethods = {"SYD":0.2}
+    # settings = load_PAM_Params()
+    # if(len(settings) > 0):
+    #     try:
+    #         minSize = settings['minSize']
+    #         catch:
     outYields = dict()
     if(batch):      
         fl = os.listdir(fp)
@@ -74,10 +80,11 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
         else:
             yields = make_Yield_Images(tif[4:])
         cv2.imshow("Random yield image", np.asarray(yields[np.random.randint(low=1,high=len(yields))]*255,dtype=np.uint8))
+        yields_for_img = yields.astype(dtype = cv2.uint8)
         tifffile.imwrite('Output/' + f"Yields_{work_name}_{fn}.tif",data = (yields[:]*255),dtype='uint8')
         mask = 0
         if("Projection" in AOI_mode):
-            mask = create_Masks(yields, 0.02)
+            mask = create_Masks(yields, 0.01)
             cv2.imshow("Mask",mask)
         cnts,hrs = cv2.findContours(mask,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
         contimg = cv2.cvtColor(np.zeros_like(mask),cv2.COLOR_GRAY2BGR)
@@ -160,7 +167,7 @@ def plot_Values(yields, names, jobname, filename, intervall = 5, rows = -1, colu
     Position = range(1,tot + 1)
     #fig = plt.figure(figsize=(5*rows, 3*columns))
     plt.close(f"{jobname}: Subpopulations")
-    fig = plt.figure(f"{jobname}: Subpopulations")
+    fig = plt.figure(f"{jobname}: Subpopulations",figsize = (6*columns,rows*5))
     fig.suptitle("Subpopulations")
     for k in range(tot):
         # add every single subplot to the figure with a for loop
@@ -183,6 +190,8 @@ def plot_Values(yields, names, jobname, filename, intervall = 5, rows = -1, colu
     fig2.suptitle("Average Yield")              
     for idx, avgs in enumerate(avg_lines):
         plt.plot(range(xlim[0],xlim[1],intervall),avgs, label=f"{filename} Sample size: {avg_sizes[idx]}")
+        plt.ylabel("Yield")
+        plt.xlabel("Minutes")
         plt.xlim(xlim)
         plt.ylim(ylim)
         plt.title(f"{jobname}")
@@ -211,7 +220,7 @@ def filter_Yields(cellyields, meths):
                       if(time+2 <= len(cell)-2):
                           if(cell[time+3] <= cell[time]):
                               remidxs.add(idx)
-    outputmsg += f"Filtered: {len(remidxs)} based on threshold: {sydthres}"
+    outputmsg += f"Filtered: {len(remidxs)} based on threshold: {sydthres}. {remidxs}"
     print(outputmsg)
     return np.delete(cellyields,list(remidxs),axis=0)
               
@@ -372,6 +381,14 @@ if __name__ == '__main__':
             sys.exit()
         job_name = args[jindex]
     data = perform_Analysis(fp,job_name, batch = batch_flag)
+    
+def load_PAM_Params(fp = "PAMSet.txt"):
+    with open(fp, mode='r') as file:
+        lines = file.readlines()
+        lines = [line.split('=') for line in lines]
+        params = dict(lines)
+        return params
+ 
     
 def cleanup():
     import cv2
