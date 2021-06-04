@@ -39,7 +39,7 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
     create_Plots = True
     minsize = 15
     maxsize = 90
-    subpopthreshold_size = 0.2
+    subpopthreshold_size = 0.3
     subpopfloor = 0.1
     filterMethods = {"SYD":0.2}
     # settings = load_PAM_Params()
@@ -139,6 +139,7 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
             subs, names = subdivide_Yield(filteredYields[:,1:], threshold_size = subpopthreshold_size, disc_pos = 1,floor = subpopfloor)
             print(f"{len(subs)}")
             plot_Values(subs,names, work_name, fn)
+            plot_hists(fileredYields[:,1:])
         #For outside use, return our filtered yields
         outYields[f"{fn}"] = filteredYields
     return outYields
@@ -148,7 +149,7 @@ def reanalyze(yields, indexes):
     manFilteredYields = [part for part in yields if part[0] in indexes]
     return manFilteredYields
     
-def plot_Values(yields, names, jobname, filename, intervall = 5, rows = -1, columns = -1):
+def plot_Values(yields, names, jobname, filename, intervall = 5, rows = -1, columns = -1, mode = "Lines"):
     #Assumes that yields is formatted as yields.shape = [n(subplots),n(samples),n(values)]
     tot = len(names)
     if(tot == 1):
@@ -184,6 +185,7 @@ def plot_Values(yields, names, jobname, filename, intervall = 5, rows = -1, colu
         for part in yields[k]:
             ax.plot(range(xlim[0],xlim[1],intervall),part, marker='o', markersize = 3, linewidth = 0.5)
     fig.tight_layout(pad = 3.0)
+    fig.savefig(fname =f"")
     
     #plt.close(f"{jobname}: Average_Yield")
     fig2 = plt.figure(f"{jobname}: Average_Yield", figsize=(6,6))
@@ -200,6 +202,10 @@ def plot_Values(yields, names, jobname, filename, intervall = 5, rows = -1, colu
     fig2.savefig(fname = f"Output/{jobname}_Average_Yields")
     #1 big plot of just means
     #figure of subplots with subpopulation datapoints compared to all means 
+
+
+def plot_hists(yields):
+        fig3 = plt.hist(yields)
         
 def filter_Yields(cellyields, meths):
     SYD = False
