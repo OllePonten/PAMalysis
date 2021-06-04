@@ -40,7 +40,7 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
     minsize = 15
     maxsize = 90
     subpopthreshold_size = 0.2
-    subpopfloor = 0
+    subpopfloor = 0.1
     filterMethods = {"SYD":0.2}
     # settings = load_PAM_Params()
     # if(len(settings) > 0):
@@ -80,8 +80,8 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
         else:
             yields = make_Yield_Images(tif[4:])
         cv2.imshow("Random yield image", np.asarray(yields[np.random.randint(low=1,high=len(yields))]*255,dtype=np.uint8))
-        yields_for_img = yields.astype(dtype = cv2.uint8)
-        tifffile.imwrite('Output/' + f"Yields_{work_name}_{fn}.tif",data = (yields[:]*255),dtype='uint8')
+        yields_for_img = (yields*255).astype(dtype = np.uint8)
+        tifffile.imwrite('Output/' + f"Yields_{work_name}_{fn}.tif",data = yields_for_img)
         mask = 0
         if("Projection" in AOI_mode):
             mask = create_Masks(yields, 0.01)
