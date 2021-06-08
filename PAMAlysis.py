@@ -69,12 +69,16 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
                 subpopfloor = float(settings['floor'])
             except:
                 print("floor badly formatted")
-        if('subpopthreshold' in keys):
+        if('subpop_size' in keys):
             try:
-                subpopthreshold = float(settings['floor'])
+                subpopthreshold_size = float(settings['subpop_size'])
             except:
                 print("subpopthreshold badly formatted")
-
+        if('border' in keys):
+            try:
+                border = int(settings['border'])
+            except:
+                print("border badly formatted")
     outYields = dict()
     if(batch):      
         fl = os.listdir(fp)
@@ -197,6 +201,7 @@ def plot_Values(yields, names, jobname, filename, subjob, intervall = 5, rows = 
         rows += tot % columns
     
     avg_lines = []
+    avg_errors = []
     avg_sizes = []
     xlim =[0,len(yields[0][0])*intervall]
     ylim = [0,0.9]
@@ -214,8 +219,10 @@ def plot_Values(yields, names, jobname, filename, subjob, intervall = 5, rows = 
         ax.set_ylim(ylim)
         ax.set_xlim(xlim)
         avg_line = (np.mean(yields[k][:],axis=0))
+        avg_error = (np.std(yields[k][:],axis=0))
         pop_size = len(yields[k][:])
         avg_lines.append(avg_line)
+        avg_errors.append(avg_error)
         avg_sizes.append(pop_size)
         for part in yields[k]:
             ax.plot(range(xlim[0],xlim[1],intervall),part, marker='o', markersize = 3, linewidth = 0.5)
@@ -224,15 +231,17 @@ def plot_Values(yields, names, jobname, filename, subjob, intervall = 5, rows = 
     
     #plt.close(f"{jobname}: Average_Yield")
     fig2 = plt.figure(f"{jobname}: Average_Yield")
-    fig2.suptitle("Average Yield")              
+    fig2.suptitle(f"{jobname}: Average Yield")              
     for idx, avgs in enumerate(avg_lines):
-        plt.plot(range(xlim[0],xlim[1],intervall),avgs, label=f"Sample size: {avg_sizes[idx]}", c=color)
+        avg_color = color.append(avgs[0])
+        print(color)
+        #plt.errorbar(range(xlim[0],xlim[1],intervall),avgs, yerr = avg_errors[idx], label=f"Sample size: {avg_sizes[idx]}", c=color)
+        plt.plot(range(xlim[0],xlim[1],intervall),avgs, label=f"S:{avg_sizes[idx]}", c=avg_color)
         plt.ylabel("Yield")
         plt.xlabel("Minutes")
         plt.xlim(xlim)
         plt.ylim(ylim)
-        plt.title(f"{jobname}")
-    fig2.legend(bbox_to_anchor=(0.85,0.85), ncol = 3)
+    fig2.legend(bbox_to_anchor=(0.95,0.85), ncol = 3)
     fig2.tight_layout()
     fig2.savefig(fname = f"Output/{jobname}_Average_Yields")
     #1 big plot of just means
