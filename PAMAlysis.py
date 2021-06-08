@@ -15,6 +15,14 @@ import csv
 import pathlib
 import warnings
 
+def load_PAM_Params(fp = "PAMSet.txt"):
+    with open(fp, mode='r') as file:
+        lines = file.readlines()
+        lines = [line.rstrip('\n') for line in lines]
+        lines = [line.split('=') for line in lines]
+        params = dict(lines)
+        return params
+
 def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projection"):
     """
 
@@ -33,33 +41,53 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
     """
     
     cv2.destroyAllWindows()
+    plt.close('all')
     tifs = []
-    AOI = []
-    border = 25
+    border = 50
     create_Plots = True
-    minsize = 15
-    maxsize = 90
+    minsize = 20
+    maxsize = 60
     subpopthreshold_size = 0.3
     subpopfloor = 0.1
     filterMethods = {"SYD":0.2}
-    # settings = load_PAM_Params()
-    # if(len(settings) > 0):
-    #     try:
-    #         minSize = settings['minSize']
-    #         catch:
+    settings = load_PAM_Params()
+    print(settings)
+    if(len(settings) > 0):
+        keys = settings.keys()
+        if('minsize' in keys):
+            try:
+                minsize = int(settings['minsize'])
+            except:
+                print("Minsize badly formatted")
+        if('maxsize' in keys):
+            try:
+                maxsize = int(settings['maxsize'])
+            except:
+                print("maxsize badly formatted")
+        if('floor' in keys):
+            try:
+                subpopfloor = float(settings['floor'])
+            except:
+                print("floor badly formatted")
+        if('subpopthreshold' in keys):
+            try:
+                subpopthreshold = float(settings['floor'])
+            except:
+                print("subpopthreshold badly formatted")
+
     outYields = dict()
     if(batch):      
         fl = os.listdir(fp)
         tifs = [fp+ "/" + file for file in fl if ".tif" in file]
         print("Running batch mode")
-        print(f"With: {str(tifs)}")
+        print(f"Analysing following files: {str(tifs)}")
     else:
         tifs = [fp]
     try:
         os.makedirs('Output')
     except OSError:
         print("Could not create output folder")
-    for idx, i in enumerate(tifs):
+    for fovidx, i in enumerate(tifs):
         if('/' in i):
             fn = i.split('/')[-1][:-4]
         else:
@@ -69,13 +97,13 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
             input(f"Could not load image: {fn} Please check filename")
             sys.exit()
         print(f"{fn}")
-        tif = tif[4:]
+        tif = tif[4:160]
         #Remove first 4 images     
         imgwidth = 640
         imgheight = 480
         if(border > 0):
             yields = [frame[border:imgheight-border,border*2:imgwidth-border*2]for frame in tif]
-            yields = yields[4:]
+            #yields = yields[4:]
             yields = make_Yield_Images(yields)
         else:
             yields = make_Yield_Images(tif[4:])
@@ -138,8 +166,8 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
         if(create_Plots):
             subs, names = subdivide_Yield(filteredYields[:,1:], threshold_size = subpopthreshold_size, disc_pos = 1,floor = subpopfloor)
             print(f"{len(subs)}")
-            plot_Values(subs,names, work_name, fn)
-            plot_hists(fileredYields[:,1:])
+            plot_Values(subs,names, work_name, fn,fovidx)
+            #plot_hists(filteredYields[:,1:])
         #For outside use, return our filtered yields
         outYields[f"{fn}"] = filteredYields
     return outYields
@@ -149,8 +177,15 @@ def reanalyze(yields, indexes):
     manFilteredYields = [part for part in yields if part[0] in indexes]
     return manFilteredYields
     
-def plot_Values(yields, names, jobname, filename, intervall = 5, rows = -1, columns = -1, mode = "Lines"):
+def plot_Values(yields, names, jobname, filename, subjob, intervall = 5, rows = -1, columns = -1, mode = "Lines"):
     #Assumes that yields is formatted as yields.shape = [n(subplots),n(samples),n(values)]
+    color = None
+    if(subjob%3==0):
+        color = [0,0,np.random.rand()]
+    elif(subjob%2 == 0):
+        color = [0,np.random.rand(),0]
+    else:
+        color = [np.random.rand(),0,0]
     tot = len(names)
     if(tot == 1):
         #Only one dataset.
@@ -164,7 +199,7 @@ def plot_Values(yields, names, jobname, filename, intervall = 5, rows = -1, colu
     avg_lines = []
     avg_sizes = []
     xlim =[0,len(yields[0][0])*intervall]
-    ylim = [0,0.8]
+    ylim = [0,0.9]
     Position = range(1,tot + 1)
     #fig = plt.figure(figsize=(5*rows, 3*columns))
     plt.close(f"{jobname}: Subpopulations")
@@ -185,20 +220,20 @@ def plot_Values(yields, names, jobname, filename, intervall = 5, rows = -1, colu
         for part in yields[k]:
             ax.plot(range(xlim[0],xlim[1],intervall),part, marker='o', markersize = 3, linewidth = 0.5)
     fig.tight_layout(pad = 3.0)
-    fig.savefig(fname =f"")
+    fig.savefig(fname =f"Output/{jobname}_{subjob}_total_yields")
     
     #plt.close(f"{jobname}: Average_Yield")
-    fig2 = plt.figure(f"{jobname}: Average_Yield", figsize=(6,6))
+    fig2 = plt.figure(f"{jobname}: Average_Yield")
     fig2.suptitle("Average Yield")              
     for idx, avgs in enumerate(avg_lines):
-        plt.plot(range(xlim[0],xlim[1],intervall),avgs, label=f"{filename} Sample size: {avg_sizes[idx]}")
+        plt.plot(range(xlim[0],xlim[1],intervall),avgs, label=f"Sample size: {avg_sizes[idx]}", c=color)
         plt.ylabel("Yield")
         plt.xlabel("Minutes")
         plt.xlim(xlim)
         plt.ylim(ylim)
         plt.title(f"{jobname}")
-    plt.legend()
-    fig2.tight_layout(pad=3.0)
+    fig2.legend(bbox_to_anchor=(0.85,0.85), ncol = 3)
+    fig2.tight_layout()
     fig2.savefig(fname = f"Output/{jobname}_Average_Yields")
     #1 big plot of just means
     #figure of subplots with subpopulation datapoints compared to all means 
@@ -387,14 +422,6 @@ if __name__ == '__main__':
             sys.exit()
         job_name = args[jindex]
     data = perform_Analysis(fp,job_name, batch = batch_flag)
-    
-def load_PAM_Params(fp = "PAMSet.txt"):
-    with open(fp, mode='r') as file:
-        lines = file.readlines()
-        lines = [line.split('=') for line in lines]
-        params = dict(lines)
-        return params
- 
     
 def cleanup():
     import cv2
