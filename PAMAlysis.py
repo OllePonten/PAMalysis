@@ -16,12 +16,16 @@ import pathlib
 import warnings
 
 def load_PAM_Params(fp = "PAMSet.txt"):
-    with open(fp, mode='r') as file:
-        lines = file.readlines()
-        lines = [line.rstrip('\n') for line in lines]
-        lines = [line.split('=') for line in lines]
-        params = dict(lines)
-        return params
+    try:
+        with open(fp, mode='r') as file:
+            lines = file.readlines()
+            lines = [line.rstrip('\n') for line in lines]
+            lines = [line.split('=') for line in lines]
+            params = dict(lines)
+            return params
+    except FileNotFoundError:
+        print("No pamset text file found, proceeding with defaults")
+        return []
 
 def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projection"):
     """
@@ -45,13 +49,13 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
     tifs = []
     border = 50
     create_Plots = True
-    minsize = 20
+    minsize = 15
     maxsize = 60
     subpopthreshold_size = 0.3
     subpopfloor = 0.1
     filterMethods = {"SYD":0.2}
     settings = load_PAM_Params()
-    print(settings)
+    output_folder = ""
     if(len(settings) > 0):
         keys = settings.keys()
         if('minsize' in keys):
@@ -88,7 +92,8 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
     else:
         tifs = [fp]
     try:
-        os.makedirs('Output')
+        output_folder = f'Output/{work_name}'
+        os.makedirs(output_folder)
     except OSError:
         print("Could not create output folder")
     for fovidx, i in enumerate(tifs):
@@ -101,7 +106,7 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
             input(f"Could not load image: {fn} Please check filename")
             sys.exit()
         print(f"{fn}")
-        tif = tif[4:160]
+        tif = tif[4:]
         #Remove first 4 images     
         imgwidth = 640
         imgheight = 480
@@ -113,7 +118,7 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
             yields = make_Yield_Images(tif[4:])
         cv2.imshow("Random yield image", np.asarray(yields[np.random.randint(low=1,high=len(yields))]*255,dtype=np.uint8))
         yields_for_img = (yields*255).astype(dtype = np.uint8)
-        tifffile.imwrite('Output/' + f"Yields_{work_name}_{fn}.tif",data = yields_for_img)
+        tifffile.imwrite(f'{output_folder}/' + f"Yields_{work_name}_{fn}.tif",data = yields_for_img)
         mask = 0
         if("Projection" in AOI_mode):
             mask = create_Masks(yields, 0.01)
@@ -161,10 +166,11 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
         filteredYields = filter_Yields(meanYields, filterMethods)
         print(f"Yields remaining after filter: {len(filteredYields)}")
         cv2.imshow("Numbered masks",filteredMask)
-        cv2.imwrite('Output/' + work_name + '_' + fn + "numbered masks.tif", filteredMask)       
+        cv2.imwrite(f'{output_folder}/' + work_name + '_' + fn + "numbered masks.tif", filteredMask)       
         #cv2.imshow("Cell_mini", cell_minis[np.random.randint(low=0,high=len(cell_minis))])
-        with open('Output/' + work_name +'_'+ fn + '.csv', mode = 'w',newline="") as pos_file:
+        with open(f'{output_folder}/' + work_name +'_'+ fn + '.csv', mode = 'w',newline="") as pos_file:
             yield_writer = csv.writer(pos_file, delimiter = ",",quotechar = '"', quoting = csv.QUOTE_MINIMAL)
+            yield_writer.writerow(settings.items() )
             for idx,part in enumerate(filteredYields):
                 yield_writer.writerow(part)     
         if(create_Plots):
@@ -184,6 +190,7 @@ def reanalyze(yields, indexes):
 def plot_Values(yields, names, jobname, filename, subjob, intervall = 5, rows = -1, columns = -1, mode = "Lines"):
     #Assumes that yields is formatted as yields.shape = [n(subplots),n(samples),n(values)]
     color = None
+    output_dir = f"Output/{jobname}"
     if(subjob%3==0):
         color = [0,0,np.random.rand()]
     elif(subjob%2 == 0):
@@ -227,7 +234,7 @@ def plot_Values(yields, names, jobname, filename, subjob, intervall = 5, rows = 
         for part in yields[k]:
             ax.plot(range(xlim[0],xlim[1],intervall),part, marker='o', markersize = 3, linewidth = 0.5)
     fig.tight_layout(pad = 3.0)
-    fig.savefig(fname =f"Output/{jobname}_{subjob}_total_yields")
+    fig.savefig(fname =f"{output_dir}/{jobname}_{subjob}_total_yields")
     
     #plt.close(f"{jobname}: Average_Yield")
     fig2 = plt.figure(f"{jobname}: Average_Yield")
@@ -241,9 +248,9 @@ def plot_Values(yields, names, jobname, filename, subjob, intervall = 5, rows = 
         plt.xlabel("Minutes")
         plt.xlim(xlim)
         plt.ylim(ylim)
-    fig2.legend(bbox_to_anchor=(0.95,0.85), ncol = 3)
+    #fig2.legend(bbox_to_anchor=(0.95,0.85), ncol = 3)
     fig2.tight_layout()
-    fig2.savefig(fname = f"Output/{jobname}_Average_Yields")
+    fig2.savefig(fname = f"{output_dir}/{jobname}_Average_Yields")
     #1 big plot of just means
     #figure of subplots with subpopulation datapoints compared to all means 
 
