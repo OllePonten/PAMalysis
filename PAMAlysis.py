@@ -49,6 +49,7 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
     tifs = []
     border = 50
     create_Plots = True
+    intervall = 5
     minsize = 15
     maxsize = 60
     subpopthreshold_size = 0.3
@@ -83,6 +84,11 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
                 border = int(settings['border'])
             except:
                 print("border badly formatted")
+        if('intervall' in keys):
+            try:
+                intervall = int(settings['intervall'])
+            except:
+                print("Intervall badly formatted")
     outYields = dict()
     if(batch):      
         fl = os.listdir(fp)
@@ -121,7 +127,7 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
         tifffile.imwrite(f'{output_folder}/' + f"Yields_{work_name}_{fn}.tif",data = yields_for_img)
         mask = 0
         if("Projection" in AOI_mode):
-            mask = create_Masks(yields, 0.01)
+            mask = create_Masks(yields, 0.001)
             cv2.imshow("Mask",mask)
         cnts,hrs = cv2.findContours(mask,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
         contimg = cv2.cvtColor(np.zeros_like(mask),cv2.COLOR_GRAY2BGR)
@@ -140,11 +146,10 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
         cv2.imshow("Filtered conts",filteredMask)  
         #Output table
         meanYields = np.zeros(shape=(len(size_filt_cnts),len(yields)+1))
-        #np.seterr(all='raise')
         for cellidx, cnt in enumerate(size_filt_cnts):
             #Get minimum bounding rect
             rect = cv2.boundingRect(cnt)
-            cellMinis = yields[:,rect[1]:rect[1]+rect[3],rect[0]:rect[0]+rect[2]]
+            cellMinis = yields[:,rect[1]-1:rect[1]+rect[3]+1,rect[0]-1:rect[0]+rect[2]+1]
             filteredMask = cv2.putText(filteredMask,str(cellidx), (rect[0],rect[1]+int(rect[3]/2)), cv2.FONT_HERSHEY_PLAIN, 0.5,(0,255,0),thickness = 1)
             for timeidx,img in enumerate(cellMinis):  
                 with warnings.catch_warnings():
@@ -176,7 +181,7 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
         if(create_Plots):
             subs, names = subdivide_Yield(filteredYields[:,1:], threshold_size = subpopthreshold_size, disc_pos = 1,floor = subpopfloor)
             print(f"{len(subs)}")
-            plot_Values(subs,names, work_name, fn,fovidx)
+            plot_Values(subs,names, work_name, fn,fovidx, intervall)
             #plot_hists(filteredYields[:,1:])
         #For outside use, return our filtered yields
         outYields[f"{fn}"] = filteredYields
@@ -187,7 +192,7 @@ def reanalyze(yields, indexes):
     manFilteredYields = [part for part in yields if part[0] in indexes]
     return manFilteredYields
     
-def plot_Values(yields, names, jobname, filename, subjob, intervall = 5, rows = -1, columns = -1, mode = "Lines"):
+def plot_Values(yields, names, jobname, filename, subjob, intervall = 30, rows = -1, columns = -1, mode = "Lines"):
     #Assumes that yields is formatted as yields.shape = [n(subplots),n(samples),n(values)]
     color = None
     output_dir = f"Output/{jobname}"
@@ -203,15 +208,22 @@ def plot_Values(yields, names, jobname, filename, subjob, intervall = 5, rows = 
         columns = 1
         rows = 1
     if(rows == -1 or columns == -1):
-        columns = int(tot/2)
-        rows = tot // columns 
-        rows += tot % columns
+        if(len(yields) > 3):
+            columns = 2
+            rows = len(yields)-3
+        else:
+            columns = 1
+            rows = len(yields)
+        # columns = int(tot/1)
+        # rows = tot // columns 
+        # rows += tot % columns
     
     avg_lines = []
     avg_errors = []
     avg_sizes = []
     xlim =[0,len(yields[0][0])*intervall]
-    ylim = [0,0.9]
+    ylim = [0.2,0.7]
+    
     Position = range(1,tot + 1)
     #fig = plt.figure(figsize=(5*rows, 3*columns))
     plt.close(f"{jobname}: Subpopulations")
@@ -243,12 +255,18 @@ def plot_Values(yields, names, jobname, filename, subjob, intervall = 5, rows = 
         avg_color = color.append(avgs[0])
         print(color)
         #plt.errorbar(range(xlim[0],xlim[1],intervall),avgs, yerr = avg_errors[idx], label=f"Sample size: {avg_sizes[idx]}", c=color)
-        plt.plot(range(xlim[0],xlim[1],intervall),avgs, label=f"S:{avg_sizes[idx]}", c=avg_color)
+        plt.plot(range(xlim[0],xlim[1],intervall),avgs, label=f"{filename}: S:{avg_sizes[idx]}", c=avg_color)
         plt.ylabel("Yield")
         plt.xlabel("Minutes")
         plt.xlim(xlim)
         plt.ylim(ylim)
-    #fig2.legend(bbox_to_anchor=(0.95,0.85), ncol = 3)
+        #gca = plt.gca()
+        #yax = gca.yaxis()
+        #yax.set_major_locator(plt.MultipleLocator(0.1))
+        #yax.set_major_formatter(np.arange(ylim[0], ylim[1], step=(ylim[1]-ylim[0])/10)
+        #yax.set
+        plt.yticks(np.arange(ylim[0], ylim[1], step=(ylim[1]-ylim[0])/10), labels=None)
+    fig2.legend(bbox_to_anchor=(0.95,0.85), ncol = 2)
     fig2.tight_layout()
     fig2.savefig(fname = f"{output_dir}/{jobname}_Average_Yields")
     #1 big plot of just means
@@ -368,7 +386,7 @@ def create_Masks(imgstack, maskthres = 0.01):
     #intensity over the entire stack, i.e. the length of the stack.
     threshold = imgstack.shape[0]*maskthres
     #Simple threshold
-    summed[summed <= threshold] = 0
+    summed[summed < threshold] = 0
     summed = summed.astype(np.uint8)
     np.clip(summed,0,255,out=summed)
     return summed
