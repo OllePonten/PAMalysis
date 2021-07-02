@@ -50,7 +50,7 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
     border = 50
     create_Plots = True
     intervall = 5
-    minsize = 15
+    minsize = 5
     maxsize = 60
     subpopthreshold_size = 0.3
     subpopfloor = 0.1
@@ -107,27 +107,28 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
             fn = i.split('/')[-1][:-4]
         else:
             fn = i
-        (succ,tif) = cv2.imreadmulti(i)
-        if(not succ):
-            input(f"Could not load image: {fn} Please check filename")
-            sys.exit()
+        tif = tifffile.imread(i)
+        #if(not succ):
+         #   input(f"Could not load image: {fn} Please check filename")
+          #  sys.exit()
         print(f"{fn}")
-        tif = tif[4:]
-        #Remove first 4 images     
+        np.delete(tif,[2,3],0)
+        #Remove first 4 images  
         imgwidth = 640
         imgheight = 480
         if(border > 0):
             yields = [frame[border:imgheight-border,border*2:imgwidth-border*2]for frame in tif]
-            #yields = yields[4:]
+            print(yields)
             yields = make_Yield_Images(yields)
+            print(yields)
         else:
             yields = make_Yield_Images(tif[4:])
-        cv2.imshow("Random yield image", np.asarray(yields[np.random.randint(low=1,high=len(yields))]*255,dtype=np.uint8))
+        cv2.imshow("Random yield image", np.asarray(yields[0]*255,dtype=np.uint8))
         yields_for_img = (yields*255).astype(dtype = np.uint8)
         tifffile.imwrite(f'{output_folder}/' + f"Yields_{work_name}_{fn}.tif",data = yields_for_img)
         mask = 0
         if("Projection" in AOI_mode):
-            mask = create_Masks(yields, 0.001)
+            mask = create_Masks(yields, 0.01)
             cv2.imshow("Mask",mask)
         cnts,hrs = cv2.findContours(mask,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
         contimg = cv2.cvtColor(np.zeros_like(mask),cv2.COLOR_GRAY2BGR)
@@ -175,13 +176,13 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
         #cv2.imshow("Cell_mini", cell_minis[np.random.randint(low=0,high=len(cell_minis))])
         with open(f'{output_folder}/' + work_name +'_'+ fn + '.csv', mode = 'w',newline="") as pos_file:
             yield_writer = csv.writer(pos_file, delimiter = ",",quotechar = '"', quoting = csv.QUOTE_MINIMAL)
-            yield_writer.writerow(settings.items() )
+            #yield_writer.writerow(settings.items() )
             for idx,part in enumerate(filteredYields):
                 yield_writer.writerow(part)     
         if(create_Plots):
             subs, names = subdivide_Yield(filteredYields[:,1:], threshold_size = subpopthreshold_size, disc_pos = 1,floor = subpopfloor)
             print(f"{len(subs)}")
-            plot_Values(subs,names, work_name, fn,fovidx, intervall)
+            #plot_Values(subs,names, work_name, fn,fovidx, intervall)
             #plot_hists(filteredYields[:,1:])
         #For outside use, return our filtered yields
         outYields[f"{fn}"] = filteredYields
@@ -355,7 +356,7 @@ def make_Yield_Images(img_stack):
     #Yield is defined as Fv/Fm or (Fm-Fo)/Fm
     Yield = []
     for i in range(len(Fo)):
-        Mask = np.where(Fo[i] > 9,1,0)
+        Mask = np.where(Fo[i] > 7,1,0)
         #Emulate remove outliers from imageJ (Which is just a median filter)
         #Mask = Mask.astype(np.uint8)        
         #Mask = cv2.bilateralFilter(Mask,2,3,3)
