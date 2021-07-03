@@ -15,6 +15,8 @@ import csv
 import pathlib
 import warnings
 
+DEBUG = False
+
 def load_PAM_Params(fp = "PAMSet.txt"):
     try:
         with open(fp, mode='r') as file:
@@ -28,6 +30,7 @@ def load_PAM_Params(fp = "PAMSet.txt"):
         return []
 
 def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projection"):
+    
     """
 
     Parameters
@@ -43,6 +46,7 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
     None.
 
     """
+    global DEBUG
     
     cv2.destroyAllWindows()
     plt.close('all')
@@ -53,6 +57,7 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
     maxsize = 60
     subpopthreshold_size = 0.3
     subpopfloor = 0.1
+    threshold = 25
     filterMethods = {"SYD":0.2}
     settings = load_PAM_Params()
     output_folder = ""
@@ -83,6 +88,11 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
                 border = int(settings['border'])
             except:
                 print("border badly formatted")
+        if('threshold' in keys):
+            try:
+                threshold = float(settings['threshold'])
+            except:
+                print("Threshold badle formatted")
     outYields = dict()
     if(batch):      
         fl = os.listdir(fp)
@@ -106,7 +116,7 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
             input(f"Could not load image: {fn} Please check filename")
             sys.exit()
         print(f"{fn}")
-        tif = tif[4:]
+        tif = tif[0:2] + tif[4:]
         #Remove first 4 images     
         imgwidth = 640
         imgheight = 480
@@ -114,15 +124,16 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
             yields = [frame[border:imgheight-border,border*2:imgwidth-border*2]for frame in tif]
             #yields = yields[4:]
             yields = make_Yield_Images(yields)
+            print(len(yields))
         else:
             yields = make_Yield_Images(tif[4:])
-        cv2.imshow("Random yield image", np.asarray(yields[np.random.randint(low=1,high=len(yields))]*255,dtype=np.uint8))
+        cv2.imshow("First yield image", np.asarray(yields[0]*255,dtype=np.uint8))
         yields_for_img = (yields*255).astype(dtype = np.uint8)
         tifffile.imwrite(f'{output_folder}/' + f"Yields_{work_name}_{fn}.tif",data = yields_for_img)
         mask = 0
         if("Projection" in AOI_mode):
-            mask = create_Masks(yields, 0.01)
-            cv2.imshow("Mask",mask)
+            mask = create_Masks(yields, threshold)
+            cv2.imshow("Mask",mask*255)
         cnts,hrs = cv2.findContours(mask,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
         contimg = cv2.cvtColor(np.zeros_like(mask),cv2.COLOR_GRAY2BGR)
         drawn = cv2.drawContours(contimg,cnts,-1,(0,0,255),-1)
@@ -348,7 +359,7 @@ def make_Yield_Images(img_stack):
         Yield.append(cYield)
     return np.asarray(Yield)
     
-def create_Masks(imgstack, maskthres = 0.01):
+def create_Masks(imgstack, maskthres = 25):
     """
     Creates masks based on z-projection of yield values and a thresholding operation
 
@@ -363,13 +374,15 @@ def create_Masks(imgstack, maskthres = 0.01):
 
     """
     summed = np.sum(imgstack,axis = 0) 
-    #summed = np.asarray(summed,dtype=np.uint32)
     #Only keep pixels as part of a cell if they have an average of threshold pixel
     #intensity over the entire stack, i.e. the length of the stack.
+    summed = summed*255
+    print(np.median(summed))
     threshold = imgstack.shape[0]*maskthres
     #Simple threshold
     summed[summed <= threshold] = 0
     summed = summed.astype(np.uint8)
+    #summed = cv2.medianBlur(summed,3)    
     np.clip(summed,0,255,out=summed)
     return summed
     
