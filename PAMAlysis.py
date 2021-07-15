@@ -99,6 +99,16 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
                 intervall = int(settings['intervall'])
             except:
                 print("Intervall badly formatted")
+        if('SYD' in keys):
+            try:
+                SYD = bool(settings['SYD'])
+                if(SYD == False):
+                    try:
+                        filterMethods.pop("SYD")
+                    except:
+                        pass
+            except:
+                print("SYD badly formatted")    
     outYields = dict()
     if(batch):      
         fl = os.listdir(fp)
@@ -122,7 +132,7 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
          #   input(f"Could not load image: {fn} Please check filename")
           #  sys.exit()
         print(f"{fn}")
-        tif = tif[0:2] + tif[4:]
+        tif = np.concatenate((tif[0:2],tif[4:]))
         #Remove first 4 images     
         np.delete(tif,[2,3],0)
         #Remove first 2 images  
@@ -130,7 +140,6 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
         imgheight = 480
         if(border > 0):
             yields = [frame[border:imgheight-border,border*2:imgwidth-border*2]for frame in tif]
-            print(yields)
             yields = make_Yield_Images(yields)
         else:
             yields = make_Yield_Images(tif[4:])
@@ -184,7 +193,6 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
         print(f"Yields remaining after filter: {len(filteredYields)}")
         cv2.imshow("Numbered masks",filteredMask)
         cv2.imwrite(f'{output_folder}/' + work_name + '_' + fn + "numbered masks.tif", filteredMask)       
-        #cv2.imshow("Cell_mini", cell_minis[np.random.randint(low=0,high=len(cell_minis))])
         with open(f'{output_folder}/' + work_name +'_'+ fn + '.csv', mode = 'w',newline="") as pos_file:
             yield_writer = csv.writer(pos_file, delimiter = ",",quotechar = '"', quoting = csv.QUOTE_MINIMAL)
             #yield_writer.writerow(settings.items() )
@@ -192,8 +200,7 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
                 yield_writer.writerow(part)     
         if(create_Plots):
             subs, names = subdivide_Yield(filteredYields[:,1:], threshold_size = subpopthreshold_size, disc_pos = 1,floor = subpopfloor)
-            print(f"{len(subs)}")
-            #plot_Values(subs,names, work_name, fn,fovidx, intervall)
+            plot_Values(subs,names, work_name, fn,fovidx, intervall)
             #plot_hists(filteredYields[:,1:])
         #For outside use, return our filtered yields
         outYields[f"{fn}"] = filteredYields
