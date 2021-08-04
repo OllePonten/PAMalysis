@@ -61,7 +61,7 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
     threshold = 25
     Hists = False
     filterMethods = {"SYD":0.2}
-    settings = load_PAM_Params()
+    settings = load_PAM_Params(fp+"/PAMSet.txt")
     output_folder = ""
     if(len(settings) > 0):
         keys = settings.keys()
@@ -102,7 +102,7 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
                 print("Intervall badly formatted")
         if('SYD' in keys):
             try:
-                SYD = bool(settings['SYD'])
+                SYD = bool(int(settings['SYD']))
                 if(SYD == False):
                     try:
                         filterMethods.pop("SYD")
@@ -134,7 +134,7 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
             fn = i.split('/')[-1][:-4]
         else:
             fn = i
-        try:
+		try:
             tif = tifffile.imread(i)
         except:
             input(f"Could not load image: {fn} Please check filename")
@@ -143,6 +143,12 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
             tif = np.concatenate((tif[0:2],tif[4:]))
         else:
             tif = tif[0:2]
+        tif_tags = {}
+        #Get all tags
+        with tifffile.TiffFile(i) as tif_file:
+            for tag in tif_file.pages[0].tags.values():
+                name, value = tag.name,tag.value
+                tif_tags[name] = value
         imgwidth = 640
         imgheight = 480
         if(border > 0):
@@ -220,7 +226,7 @@ def reanalyze(yields, indexes):
     manFilteredYields = [part for part in yields if part[0] in indexes]
     return manFilteredYields
     
-def plot_Values(yields, names, jobname, filename, subjob, intervall = 30, rows = -1, columns = -1, mode = "Lines"):
+def plot_Values(yields, names, jobname, filename, subjob, intervall = 5, rows = -1, columns = -1, mode = "Lines"):
     #Assumes that yields is formatted as yields.shape = [n(subplots),n(samples),n(values)]
     color = None
     output_dir = f"Output/{jobname}"
@@ -249,7 +255,13 @@ def plot_Values(yields, names, jobname, filename, subjob, intervall = 30, rows =
     avg_lines = []
     avg_errors = []
     avg_sizes = []
-    xlim =[0,len(yields[0][0])*intervall]
+    xlim = [0,0]
+    try:
+        xlim =[0,len(yields[0][0])*intervall]
+    except:
+        print("Not enough data points. Shutting down")
+        return
+        
     ylim = [0.2,0.7]
     
     Position = range(1,tot + 1)
@@ -318,11 +330,11 @@ def filter_Yields(cellyields, meths):
           for time in range(1,len(cell)-1):
                   if(cell[time]-cell[time+1] > sydthres):
                      #Remove, likely fell away
-                      #Tail function so we don't remove on single frame brightness
+                     #Tail function so we don't remove on single frame brightness
                       if(time+2 <= len(cell)-2):
                           if(cell[time+3] <= cell[time]):
                               remidxs.add(idx)
-    outputmsg += f"Filtered: {len(remidxs)} based on threshold: {sydthres}. {remidxs}"
+    outputmsg += f"Filtered: {len(remidxs)} based on threshold: {sydthres}. {list(remidxs)}"
     print(outputmsg)
     return np.delete(cellyields,list(remidxs),axis=0)
               
@@ -393,7 +405,7 @@ def make_Yield_Images(img_stack):
         Yield.append(cYield)
     return np.asarray(Yield)
     
-def create_Masks(imgstack, maskthres = 25):
+def create_Masks(imgstack, maskthres = 20):
     """
     Creates masks based on z-projection of yield values and a thresholding operation
 
