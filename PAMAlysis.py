@@ -51,14 +51,15 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
     cv2.destroyAllWindows()
     plt.close('all')
     tifs = []
-    border = 50
+    border = 100
     create_Plots = True
     intervall = 5
     minsize = 5
     maxsize = 60
     subpopthreshold_size = 0.3
     subpopfloor = 0.1
-    threshold = 20
+    threshold = 25
+    Hists = False
     filterMethods = {"SYD":0.2}
     if(batch):
         settings = load_PAM_Params(fp+"/PAMSet.txt")
@@ -111,7 +112,13 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
                     except:
                         pass
             except:
-                print("SYD badly formatted")    
+                print("SYD badly formatted")
+        if('Histogram' in keys):
+            try:
+                Hists = bool(settings['Histogram'])
+            except:
+                pass
+                
     outYields = dict()
     if(batch):      
         fl = os.listdir(fp)
@@ -130,21 +137,28 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
             fn = i.split('/')[-1][:-4]
         else:
             fn = i
+		try:
+            tif = tifffile.imread(i)
+        except:
+            input(f"Could not load image: {fn} Please check filename")
+            sys.exit()
+        if(len(tif) > 6):
+            tif = np.concatenate((tif[0:2],tif[4:]))
+        else:
+            tif = tif[0:2]
         tif_tags = {}
         #Get all tags
         with tifffile.TiffFile(i) as tif_file:
             for tag in tif_file.pages[0].tags.values():
                 name, value = tag.name,tag.value
                 tif_tags[name] = value
-        tif = tifffile.imread(i)
-        tif = np.concatenate((tif[0:2],tif[4:]))
         imgwidth = 640
         imgheight = 480
         if(border > 0):
             yields = [frame[border:imgheight-border,border*2:imgwidth-border*2]for frame in tif]
             yields = make_Yield_Images(yields)
         else:
-            yields = make_Yield_Images(tif[4:])
+            yields = make_Yield_Images(tif)
         cv2.imshow("First yield image", np.asarray(yields[0]*255,dtype=np.uint8))
         yields_for_img = (yields*255).astype(dtype = np.uint8)
         tifffile.imwrite(f'{output_folder}/' + f"Yields_{work_name}_{fn}.tif",data = yields_for_img)
@@ -197,12 +211,14 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
         cv2.imwrite(f'{output_folder}/' + work_name + '_' + fn + "numbered masks.tif", filteredMask)       
         with open(f'{output_folder}/' + work_name +'_'+ fn + '.csv', mode = 'w',newline="") as pos_file:
             yield_writer = csv.writer(pos_file, delimiter = ",",quotechar = '"', quoting = csv.QUOTE_MINIMAL)
-            #yield_writer.writerow(settings.items() )
+            if(isinstance(settings,dict)):
+                yield_writer.writerow(settings.items() )
             for idx,part in enumerate(filteredYields):
                 yield_writer.writerow(part)     
         if(create_Plots):
             subs, names = subdivide_Yield(filteredYields[:,1:], threshold_size = subpopthreshold_size, disc_pos = 1,floor = subpopfloor)
             plot_Values(subs,names, work_name, fn,fovidx, intervall)
+            plot_hists(subs)
             #plot_hists(filteredYields[:,1:])
         #For outside use, return our filtered yields
         outYields[f"{fn}"] = filteredYields
@@ -276,9 +292,9 @@ def plot_Values(yields, names, jobname, filename, subjob, intervall = 5, rows = 
     fig2 = plt.figure(f"{jobname}: Average_Yield")
     fig2.suptitle(f"{jobname}: Average Yield")              
     for idx, avgs in enumerate(avg_lines):
-        avg_color = color.append(avgs[0])
-        #plt.errorbar(range(xlim[0],xlim[1],intervall),avgs, yerr = avg_errors[idx], label=f"Sample size: {avg_sizes[idx]}", c=color)
-        plt.plot(range(xlim[0],xlim[1],intervall),avgs, label=f"{filename}: S:{avg_sizes[idx]}", c=avg_color)
+        avg_color = color + avgs[idx]
+        plt.errorbar(range(xlim[0],xlim[1],intervall),avgs, yerr = avg_errors[idx], label=f"Sample size: {avg_sizes[idx]}", linewidth = 3, linestyle = 'dashed', c=avg_color, capsize = 5, elinewidth = 1, errorevery =(1,10))
+        #plt.plot(range(xlim[0],xlim[1],intervall),avgs, label=f"{filename}: S:{avg_sizes[idx]}", c=avg_color)
         plt.ylabel("Yield")
         plt.xlabel("Minutes")
         plt.xlim(xlim)
