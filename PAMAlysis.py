@@ -60,7 +60,10 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
     subpopfloor = 0.1
     threshold = 20
     filterMethods = {"SYD":0.2}
-    settings = load_PAM_Params(fp+"/PAMSet.txt")
+    if(batch):
+        settings = load_PAM_Params(fp+"/PAMSet.txt")
+    else:
+        settings = load_PAM_Params()
     output_folder = ""
     if(len(settings) > 0):
         keys = settings.keys()
@@ -181,7 +184,7 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
                         #(Likely cells who have wandered off)
                         meanYield = np.nanmean(np.where(img!=0,img,np.nan))  
                     except Warning:
-                        print(f"Nan/Zero yield enc. Timeindex: {timeidx}. Cellindex: {cellidx}. Setting zero")
+                        #print(f"Nan/Zero yield enc. Timeindex: {timeidx}. Cellindex: {cellidx}. Setting zero")
                         meanYield = 0
                     if(timeidx == 0):
                         meanYields[cellidx,0] = cellidx
@@ -210,7 +213,7 @@ def reanalyze(yields, indexes):
     manFilteredYields = [part for part in yields if part[0] in indexes]
     return manFilteredYields
     
-def plot_Values(yields, names, jobname, filename, subjob, intervall = 5, rows = -1, columns = -1, mode = "Lines"):
+def plot_Values(yields, names, jobname, filename, subjob, intervall = 5, rows = -1, columns = -1, mode = "Lines", floor = 0.2):
     #Assumes that yields is formatted as yields.shape = [n(subplots),n(samples),n(values)]
     color = None
     output_dir = f"Output/{jobname}"
@@ -226,15 +229,14 @@ def plot_Values(yields, names, jobname, filename, subjob, intervall = 5, rows = 
         columns = 1
         rows = 1
     if(rows == -1 or columns == -1):
-        if(len(yields) > 3):
-            columns = 2
-            rows = len(yields)-3
-        else:
-            columns = 1
-            rows = len(yields)
-        # columns = int(tot/1)
-        # rows = tot // columns 
-        # rows += tot % columns
+        columns = 1
+        if(tot % 2 == 0):
+            columns = int(tot/2)
+            
+            rows = 2
+        elif(tot % 2 == 1):
+            columns = int(tot/2 + 1)
+            rows = 2
     
     avg_lines = []
     avg_errors = []
@@ -244,10 +246,8 @@ def plot_Values(yields, names, jobname, filename, subjob, intervall = 5, rows = 
         xlim =[0,len(yields[0][0])*intervall]
     except:
         print("Not enough data points. Shutting down")
-        return
-        
-    ylim = [0.2,0.7]
-    
+        return     
+    ylim = [floor,0.7] 
     Position = range(1,tot + 1)
     #fig = plt.figure(figsize=(5*rows, 3*columns))
     plt.close(f"{jobname}: Subpopulations")
