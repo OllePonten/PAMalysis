@@ -217,6 +217,7 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
         cv2.imwrite(f'{output_folder}/' + work_name + '_' + fn + "numbered masks.tif", filteredMask)       
         with open(f'{output_folder}/' + work_name +'_'+ fn + '.csv', mode = 'w',newline="") as pos_file:
             yield_writer = csv.writer(pos_file, delimiter = ",",quotechar = '"', quoting = csv.QUOTE_MINIMAL)
+            yield_writer.writerow(fn)
             if(isinstance(settings,dict)):
                 yield_writer.writerow(settings.items() )
             for idx,part in enumerate(filteredYields):
@@ -323,7 +324,8 @@ def plot_hists(yields,jobname):
     output_dir = f"Output/{jobname}"
     print(len(yields))
     fig = plt.figure(f"{jobname}")
-    plt.hist(yields, bins=[0.2,0.3,0.4,0.5,0.6,0.7])
+    fig.suptitle(f"{jobname}: Histogram of Yields")
+    plt.hist(yields, bins=[0.2,0.25, 0.3,0.35, 0.4,0.45,0.5,0.55,0.6])
     fig.savefig(f"{output_dir}/{jobname}_Histogram")
         
 def filter_Yields(cellyields, meths):
