@@ -59,7 +59,7 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
     subpopthreshold_size = 0.3
     subpopfloor = 0.1
     threshold = 25
-    Hists = False
+    create_Hists = False
     filterMethods = {"SYD":0.2}
     if(batch):
         settings = load_PAM_Params(fp+"/PAMSet.txt")
@@ -115,10 +115,16 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
                 print("SYD badly formatted")
         if('Histogram' in keys):
             try:
-                Hists = bool(settings['Histogram'])
+                create_Hists = bool(int(settings['Histogram']))
             except:
+                print("Histogram badly formatted")
                 pass
-                
+        if('Plots' in keys):
+            try:
+                create_Plots = bool(int(settings['Plots']))
+            except:
+                print("Histogram badly formatted")
+                pass
     outYields = dict()
     if(batch):      
         fl = os.listdir(fp)
@@ -137,7 +143,7 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
             fn = i.split('/')[-1][:-4]
         else:
             fn = i
-		try:
+        try:
             tif = tifffile.imread(i)
         except:
             input(f"Could not load image: {fn} Please check filename")
@@ -215,13 +221,14 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
                 yield_writer.writerow(settings.items() )
             for idx,part in enumerate(filteredYields):
                 yield_writer.writerow(part)     
+            subs, names = subdivide_Yield(filteredYields[:,1:], threshold_size = subpopthreshold_size, disc_pos = 0,floor = subpopfloor)
         if(create_Plots):
-            subs, names = subdivide_Yield(filteredYields[:,1:], threshold_size = subpopthreshold_size, disc_pos = 1,floor = subpopfloor)
-            plot_Values(subs,names, work_name, fn,fovidx, intervall)
-            plot_hists(subs)
-            #plot_hists(filteredYields[:,1:])
+            plot_Values(subs,names, work_name, fn,fovidx, intervall)      
         #For outside use, return our filtered yields
         outYields[f"{fn}"] = filteredYields
+    if(create_Hists):
+            unsorted_Yields = np.concatenate(list(outYields.values()))
+            plot_hists(unsorted_Yields,work_name)
     return outYields
     
 def reanalyze(yields, indexes):
@@ -292,7 +299,7 @@ def plot_Values(yields, names, jobname, filename, subjob, intervall = 5, rows = 
     fig2 = plt.figure(f"{jobname}: Average_Yield")
     fig2.suptitle(f"{jobname}: Average Yield")              
     for idx, avgs in enumerate(avg_lines):
-        avg_color = color + avgs[idx]
+        avg_color = color + [max(avgs[idx],1)]
         plt.errorbar(range(xlim[0],xlim[1],intervall),avgs, yerr = avg_errors[idx], label=f"Sample size: {avg_sizes[idx]}", linewidth = 3, linestyle = 'dashed', c=avg_color, capsize = 5, elinewidth = 1, errorevery =(1,10))
         #plt.plot(range(xlim[0],xlim[1],intervall),avgs, label=f"{filename}: S:{avg_sizes[idx]}", c=avg_color)
         plt.ylabel("Yield")
@@ -312,8 +319,12 @@ def plot_Values(yields, names, jobname, filename, subjob, intervall = 5, rows = 
     #figure of subplots with subpopulation datapoints compared to all means 
 
 
-def plot_hists(yields):
-        fig3 = plt.hist(yields)
+def plot_hists(yields,jobname):
+    output_dir = f"Output/{jobname}"
+    print(len(yields))
+    fig = plt.figure(f"{jobname}")
+    plt.hist(yields, bins=[0.2,0.3,0.4,0.5,0.6,0.7])
+    fig.savefig(f"{output_dir}/{jobname}_Histogram")
         
 def filter_Yields(cellyields, meths):
     SYD = False
@@ -360,7 +371,6 @@ def subdivide_Yield(cellyields, method = "Static Bins",floor = 0, threshold_size
             if(len(temp) > 0):
                 subpops.append(temp)
                 name = f"Subpopulation: {idx}, size: {len(temp)}. Static threshold: {(floor + (idx*threshold_size)):.3f}-{(floor+((idx+1)*threshold_size)):.3f}"
-                print(name + f" {len(temp)}")
                 names.append(name)          
     if(method == "Distribution"):
         #Create equally sized populations
@@ -423,7 +433,6 @@ def create_Masks(imgstack, maskthres = 20):
     #Only keep pixels as part of a cell if they have an average of threshold pixel
     #intensity over the entire stack, i.e. the length of the stack.
     summed = summed*255
-    print(np.median(summed))
     threshold = imgstack.shape[0]*maskthres
     #Simple threshold
     summed[summed < threshold] = 0
