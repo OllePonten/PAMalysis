@@ -228,14 +228,17 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
         print(f"Yields remaining after filter: {len(filteredYields)}")
         cv2.imshow("Numbered masks",filteredMask)
         cv2.imwrite(f'{output_folder}/' + work_name + '_' + fn + "numbered masks.tif", filteredMask)       
-        with open(f'{output_folder}/' + work_name +'_'+ fn + '.csv', mode = 'w',newline="") as pos_file:
-            yield_writer = csv.writer(pos_file, delimiter = ",",quotechar = '"', quoting = csv.QUOTE_MINIMAL)
-            yield_writer.writerow(fn)
-            if(isinstance(settings,dict)):
-                yield_writer.writerow(settings.items() )
-            for idx,part in enumerate(filteredYields):
-                yield_writer.writerow(part)     
-            subs, names = subdivide_Yield(filteredYields[:,1:], threshold_size = subpopthreshold_size, disc_pos = 0,floor = subpopfloor)
+        with open(f'{output_folder}/' + work_name+'AllYields.csv', mode = 'a', newline="") as tot_file:
+            tot_yield_writer = csv.writer(tot_file, delimiter = ",",quotechar = '"', quoting = csv.QUOTE_MINIMAL)
+            with open(f'{output_folder}/' + work_name +'_'+ fn + '.csv', mode = 'w',newline="") as pos_file:
+                yield_writer = csv.writer(pos_file, delimiter = ",",quotechar = '"', quoting = csv.QUOTE_MINIMAL)
+                yield_writer.writerow(fn)
+                if(isinstance(settings,dict)):
+                    yield_writer.writerow(settings.items() )
+                for idx,part in enumerate(filteredYields):
+                    yield_writer.writerow(part)    
+                    tot_yield_writer.writerow(part)
+                subs, names = subdivide_Yield(filteredYields[:,1:], threshold_size = subpopthreshold_size, disc_pos = 0,floor = subpopfloor)
         if(create_Plots):
             plot_Values(subs,names, work_name, fn,fovidx, intervall)      
         #For outside use, return our filtered yields
@@ -333,7 +336,6 @@ def plot_Values(yields, names, jobname, filename, subjob, intervall = 5, rows = 
     #1 big plot of just means
     #figure of subplots with subpopulation datapoints compared to all means 
 
-
 def plot_hists(yields,jobname):
     output_dir = f"Output/{jobname}"
     yields = [row[1] for row in yields]
@@ -341,8 +343,10 @@ def plot_hists(yields,jobname):
     fig.suptitle(f"{jobname}: Histogram of Yields")
     yield_bins = [0.2,0.25, 0.3,0.35, 0.4,0.45,0.5,0.55,0.6,0.65]
     arr = plt.hist(yields, bins=yield_bins)
+    plt.xticks(yield_bins)
     for i in range(len((yield_bins))-1):
         plt.text(arr[1][i]+0.02,arr[0][i]+0.2,str(int(arr[0][i])))
+    #plt.vlines(yield_bins,0,max(arr[0][:]),colors="red",linestyles='dotted')
     fig.savefig(f"{output_dir}/{jobname}_Histogram")
         
 def filter_Yields(cellyields, meths):
@@ -353,6 +357,7 @@ def filter_Yields(cellyields, meths):
     outputmsg = ""
     if('SYD' in meths.keys()):
         #Sudden Yield Drop. Filter based on corresponding threshold
+        print("Filtering using sudden yield drop")
         sydthres = meths['SYD']
         SYD = True
     for idx,cell in enumerate(cellyields):
