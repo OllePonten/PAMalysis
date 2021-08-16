@@ -161,8 +161,9 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
             input(f"Could not load image: {fn} Please check filename")
             sys.exit()
         if(len(tif) > 6):
-            print(f"Analysing time points: 1 + {4+start_point}:{4+end_point}")
-            tif = np.concatenate((tif[0:2],tif[4+(start_point*2):4+(end_point*2)]))
+            print(f"Analysing time points: {+start_point}:{end_point}")
+            #tif = np.concatenate((tif[0:2],tif[4+(start_point*2):4+(end_point*2)]))
+            tif = tif[4+(start_point*2):4+(end_point*2)]
         else:
             tif = tif[0:2]
         tif_tags = {}
