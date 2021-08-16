@@ -58,8 +58,10 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
     maxsize = 60
     subpopthreshold_size = 0.3
     subpopfloor = 0.1
-    threshold = 25
+    threshold = 20
     create_Hists = False
+    start_point=0
+    end_point=0
     filterMethods = {"SYD":0.2}
     if(batch):
         settings = load_PAM_Params(fp+"/PAMSet.txt")
@@ -123,8 +125,18 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
             try:
                 create_Plots = bool(int(settings['Plots']))
             except:
-                print("Histogram badly formatted")
+                print("Plots badly formatted")
                 pass
+        if('Startpoint' in keys):
+            try:
+                start_point = int(settings['Startpoint'])
+            except:
+                print("Startpoint badly formatted")
+        if('Endpoint' in keys):
+            try:
+                end_point = int(settings['Endpoint'])
+            except:
+                print("Endpoint badly formatted")
     outYields = dict()
     if(batch):      
         fl = os.listdir(fp)
@@ -149,7 +161,8 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
             input(f"Could not load image: {fn} Please check filename")
             sys.exit()
         if(len(tif) > 6):
-            tif = np.concatenate((tif[0:2],tif[4:]))
+            print(f"Analysing time points: 1 + {4+start_point}:{4+end_point}")
+            tif = np.concatenate((tif[0:2],tif[4+(start_point*2):4+(end_point*2)]))
         else:
             tif = tif[0:2]
         tif_tags = {}
@@ -204,7 +217,7 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
                         #(Likely cells who have wandered off)
                         meanYield = np.nanmean(np.where(img!=0,img,np.nan))  
                     except Warning:
-                        #print(f"Nan/Zero yield enc. Timeindex: {timeidx}. Cellindex: {cellidx}. Setting zero")
+                        print(f"Nan/Zero yield enc. Timeindex: {timeidx}. Cellindex: {cellidx}. Setting zero")
                         meanYield = 0
                     if(timeidx == 0):
                         meanYields[cellidx,0] = cellidx
@@ -269,6 +282,7 @@ def plot_Values(yields, names, jobname, filename, subjob, intervall = 5, rows = 
     try:
         xlim =[0,len(yields[0][0])*intervall]
     except:
+        print(yields)
         print("Not enough data points. Shutting down")
         return     
     ylim = [floor,0.7] 
@@ -322,10 +336,13 @@ def plot_Values(yields, names, jobname, filename, subjob, intervall = 5, rows = 
 
 def plot_hists(yields,jobname):
     output_dir = f"Output/{jobname}"
-    print(len(yields))
+    yields = [row[1] for row in yields]
     fig = plt.figure(f"{jobname}")
     fig.suptitle(f"{jobname}: Histogram of Yields")
-    plt.hist(yields, bins=[0.2,0.25, 0.3,0.35, 0.4,0.45,0.5,0.55,0.6])
+    yield_bins = [0.2,0.25, 0.3,0.35, 0.4,0.45,0.5,0.55,0.6,0.65]
+    arr = plt.hist(yields, bins=yield_bins)
+    for i in range(len((yield_bins))-1):
+        plt.text(arr[1][i]+0.02,arr[0][i]+0.2,str(int(arr[0][i])))
     fig.savefig(f"{output_dir}/{jobname}_Histogram")
         
 def filter_Yields(cellyields, meths):
