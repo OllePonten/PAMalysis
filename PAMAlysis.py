@@ -52,7 +52,6 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
     plt.close('all')
     tifs = []
     border = 100
-    create_Plots = True
     intervall = 5
     minsize = 5
     maxsize = 60
@@ -60,6 +59,7 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
     subpopfloor = 0.1
     threshold = 20
     create_Hists = False
+    create_Plots = True
     start_point=0
     end_point=0
     filterMethods = {"SYD":0.2}
@@ -313,29 +313,20 @@ def plot_Values(yields, names, jobname, filename, subjob, intervall = 5, rows = 
             ax.plot(range(xlim[0],xlim[1],intervall),part, marker='o', markersize = 3, linewidth = 0.5)
     fig.tight_layout(pad = 3.0)
     fig.savefig(fname =f"{output_dir}/{jobname}_{subjob}_total_yields")
-    
     #plt.close(f"{jobname}: Average_Yield")
     fig2 = plt.figure(f"{jobname}: Average_Yield")
     fig2.suptitle(f"{jobname}: Average Yield")              
     for idx, avgs in enumerate(avg_lines):
         avg_color = color + [max(avgs[idx],1)]
         plt.errorbar(range(xlim[0],xlim[1],intervall),avgs, yerr = avg_errors[idx], label=f"Sample size: {avg_sizes[idx]}", linewidth = 3, linestyle = 'dashed', c=avg_color, capsize = 5, elinewidth = 1, errorevery =(1,10))
-        #plt.plot(range(xlim[0],xlim[1],intervall),avgs, label=f"{filename}: S:{avg_sizes[idx]}", c=avg_color)
         plt.ylabel("Yield")
         plt.xlabel("Minutes")
         plt.xlim(xlim)
         plt.ylim(ylim)
-        #gca = plt.gca()
-        #yax = gca.yaxis()
-        #yax.set_major_locator(plt.MultipleLocator(0.1))
-        #yax.set_major_formatter(np.arange(ylim[0], ylim[1], step=(ylim[1]-ylim[0])/10)
-        #yax.set
         plt.yticks(np.arange(ylim[0], ylim[1], step=(ylim[1]-ylim[0])/10), labels=None)
     fig2.legend(bbox_to_anchor=(0.95,0.85), ncol = 2)
     fig2.tight_layout()
     fig2.savefig(fname = f"{output_dir}/{jobname}_Average_Yields")
-    #1 big plot of just means
-    #figure of subplots with subpopulation datapoints compared to all means 
 
 def plot_hists(yields,jobname):
     output_dir = f"Output/{jobname}"
