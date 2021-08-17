@@ -60,6 +60,7 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
     threshold = 20
     create_Hists = False
     create_Plots = True
+    Debug=False
     start_point=0
     end_point=0
     filterMethods = {"SYD":0.2}
@@ -161,9 +162,12 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
             input(f"Could not load image: {fn} Please check filename")
             sys.exit()
         if(len(tif) > 6):
-            print(f"Analysing time points: {+start_point}:{end_point}")
+            print(f"Analysing time points: {start_point}:{end_point}")
             #tif = np.concatenate((tif[0:2],tif[4+(start_point*2):4+(end_point*2)]))
-            tif = tif[4+(start_point*2):4+(end_point*2)]
+            if(end_point==0):
+                tif = tif[4+(start_point*2):]
+            else:
+                tif = tif[4+(start_point*2):4+(end_point*2)]
         else:
             tif = tif[0:2]
         tif_tags = {}
@@ -179,17 +183,20 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
             yields = make_Yield_Images(yields)
         else:
             yields = make_Yield_Images(tif)
-        cv2.imshow("First yield image", np.asarray(yields[0]*255,dtype=np.uint8))
+        if(Debug):
+            cv2.imshow("First yield image", np.asarray(yields[0]*255,dtype=np.uint8))
         yields_for_img = (yields*255).astype(dtype = np.uint8)
         tifffile.imwrite(f'{output_folder}/' + f"Yields_{work_name}_{fn}.tif",data = yields_for_img)
         mask = 0
         if("Projection" in AOI_mode):
             mask = create_Masks(yields, threshold)
-            cv2.imshow("Mask",mask*255)
+            if(Debug):
+                cv2.imshow("Mask",mask*255)
         cnts,hrs = cv2.findContours(mask,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
         contimg = cv2.cvtColor(np.zeros_like(mask),cv2.COLOR_GRAY2BGR)
         drawn = cv2.drawContours(contimg,cnts,-1,(0,0,255),-1)
-        cv2.imshow("Conts",drawn)
+        if(Debug):
+            cv2.imshow("Conts",drawn)
         print(f"Raw contours found: {len(cnts)}")
         #Remove all contours below a given size
         size_filt_cnts = []
@@ -200,7 +207,8 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
         print(f"Contours remaining filtering with size thresholds: {minsize}-{maxsize} pixels are {len(size_filt_cnts)}")
         #Draw a filtered mask
         filteredMask = cv2.drawContours(cv2.cvtColor(np.zeros_like(mask,dtype=np.uint8),cv2.COLOR_GRAY2BGR),size_filt_cnts,-1,(255,255,255),-1)
-        cv2.imshow("Filtered conts",filteredMask)  
+        if(Debug):
+            cv2.imshow("Filtered conts",filteredMask)  
         #Output table
         meanYields = np.zeros(shape=(len(size_filt_cnts),len(yields)+1))
         for cellidx, cnt in enumerate(size_filt_cnts):
@@ -339,6 +347,7 @@ def plot_hists(yields,jobname):
     for i in range(len((yield_bins))-1):
         plt.text(arr[1][i]+0.02,arr[0][i]+0.2,str(int(arr[0][i])))
     #plt.vlines(yield_bins,0,max(arr[0][:]),colors="red",linestyles='dotted')
+    plt.ylim(0,500)
     fig.savefig(f"{output_dir}/{jobname}_Histogram")
         
 def filter_Yields(cellyields, meths):
