@@ -201,7 +201,7 @@ def perform_Analysis(fp,work_name, batch = False,debug = True):
             yields = yields*mask
             mask = create_Masks(yields,1)
         if(Debug):
-            cv2.imshow("Mask",mask[0]*255)
+            cv2.imshow("Mask",mask*255)
         cnts,hrs = cv2.findContours(mask,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
         contimg = cv2.cvtColor(np.zeros_like(mask),cv2.COLOR_GRAY2BGR)
         drawn = cv2.drawContours(contimg,cnts,-1,(0,0,255),-1)
@@ -494,14 +494,16 @@ def create_Masks_Ft(imgstack,maskthres=10):
     None.
 
     """
-    fC = 1
-    fS = 1
+    fC = 3
+    fS = 3
     Fo = imgstack[::2]
     th = []
     for i in range(len(Fo)):
         src = np.array(Fo[i])
         ret,img=cv2.threshold(src,maskthres,1, cv2.THRESH_BINARY);
-        th.append(cv2.bilateralFilter(img,3,fC,fS))
+        #th.append(img)
+        #th.append(cv2.bilateralFilter(img,5,fC,fS))
+        th.append(cv2.medianBlur(img,3))
     return th
     
 
