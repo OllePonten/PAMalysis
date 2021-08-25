@@ -29,7 +29,7 @@ def load_PAM_Params(fp = "PAMSet.txt"):
         print("No pamset text file found, proceeding with defaults")
         return []
 
-def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projection"):
+def perform_Analysis(fp,work_name, batch = False,debug = True):
     
     """
 
@@ -50,6 +50,7 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
     
     cv2.destroyAllWindows()
     plt.close('all')
+    AOI_mode = "Ft_Masks"
     tifs = []
     border = 100
     intervall = 5
@@ -60,7 +61,7 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
     threshold = 20
     create_Hists = False
     create_Plots = True
-    Debug=False
+    Debug=True
     start_point=0
     end_point=0
     filterMethods = {"SYD":0.2}
@@ -138,6 +139,11 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
                 end_point = int(settings['Endpoint'])
             except:
                 print("Endpoint badly formatted")
+        if('AOI_Mode' in keys):
+            try:
+                AOI_mode = str(settings['AOI_Mode'])
+            except:
+                print("AOI Mode unknown")
     outYields = dict()
     if(batch):      
         fl = os.listdir(fp)
@@ -189,9 +195,13 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
         tifffile.imwrite(f'{output_folder}/' + f"Yields_{work_name}_{fn}.tif",data = yields_for_img)
         mask = 0
         if("Projection" in AOI_mode):
-            mask = create_Masks(yields, threshold)
-            if(Debug):
-                cv2.imshow("Mask",mask*255)
+            mask = create_Masks(yields,threshold)  
+        elif("Ft_Masks" in AOI_mode):
+            mask = create_Masks_Ft([frame[border:imgheight-border,border*2:imgwidth-border*2]for frame in tif],threshold)
+            yields = yields*mask
+            mask = create_Masks(yields,1)
+        if(Debug):
+            cv2.imshow("Mask",mask*255)
         cnts,hrs = cv2.findContours(mask,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
         contimg = cv2.cvtColor(np.zeros_like(mask),cv2.COLOR_GRAY2BGR)
         drawn = cv2.drawContours(contimg,cnts,-1,(0,0,255),-1)
@@ -216,6 +226,7 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
             rect = cv2.boundingRect(cnt)
             cellMinis = yields[:,rect[1]-1:rect[1]+rect[3]+1,rect[0]-1:rect[0]+rect[2]+1]
             filteredMask = cv2.putText(filteredMask,str(cellidx), (rect[0],rect[1]+int(rect[3]/2)), cv2.FONT_HERSHEY_PLAIN, 0.5,(0,255,0),thickness = 1)
+            zeroedidx = []
             for timeidx,img in enumerate(cellMinis):  
                 with warnings.catch_warnings():
                     warnings.filterwarnings('error')
@@ -226,12 +237,13 @@ def perform_Analysis(fp,work_name, batch = False,debug = True,AOI_mode = "Projec
                         #(Likely cells who have wandered off)
                         meanYield = np.nanmean(np.where(img!=0,img,np.nan))  
                     except Warning:
-                        print(f"Nan/Zero yield enc. Timeindex: {timeidx}. Cellindex: {cellidx}. Setting zero")
+                        if(cellidx not in zeroedidx):
+                            print(f"Nan/Zero yield enc. Timeindex: {timeidx}. Cellindex: {cellidx}. Setting zero")
+                            zeroedidx.append(cellidx)
                         meanYield = 0
                     if(timeidx == 0):
                         meanYields[cellidx,0] = cellidx
-                meanYields[cellidx,timeidx+1] = meanYield  
-        
+                meanYields[cellidx,timeidx+1] = meanYield      
         #THRESHOLD FILTER
         filteredYields = filter_Yields(meanYields, filterMethods)
         print(f"Yields remaining after filter: {len(filteredYields)}")
@@ -464,9 +476,38 @@ def create_Masks(imgstack, maskthres = 20):
     summed = summed.astype(np.uint8)
     #summed = cv2.medianBlur(summed,3)    
     np.clip(summed,0,255,out=summed)
-    return summed
+    return summed    
+
+def create_Masks_Ft(imgstack,maskthres=10):
+    """
+    Creates masks based on method from yield macro. Based on Ft values
+
+    Parameters
+    ----------
+    imgstack : TYPE
+        DESCRIPTION.
+    maskthres : TYPE, optional
+        DESCRIPTION. The default is 10.
+
+    Returns
+    -------
+    None.
+
+    """
+    fC = 3
+    fS = 3
+    Fo = imgstack[::2]
+    th = []
+    for i in range(len(Fo)):
+        src = np.array(Fo[i])
+        ret,img=cv2.threshold(src,maskthres,1, cv2.THRESH_BINARY);
+        #th.append(img)
+        #th.append(cv2.bilateralFilter(img,5,fC,fS))
+        th.append(cv2.medianBlur(img,3))
+    return th
     
-    
+
+
 def extract_Grid():
     #Extracting grid
     #Return binary mask of interest
