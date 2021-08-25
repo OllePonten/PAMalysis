@@ -325,8 +325,7 @@ def plot_Values(yields, names, jobname, filename, subjob, intervall = 5, rows = 
     fig2 = plt.figure(f"{jobname}: Average_Yield")
     fig2.suptitle(f"{jobname}: Average Yield")              
     for idx, avgs in enumerate(avg_lines):
-        avg_color = color + [max(avgs[idx],1)]
-        plt.errorbar(range(xlim[0],xlim[1],intervall),avgs, yerr = avg_errors[idx], label=f"Sample size: {avg_sizes[idx]}", linewidth = 3, linestyle = 'dashed', c=avg_color, capsize = 5, elinewidth = 1, errorevery =(1,10))
+        plt.errorbar(range(xlim[0],xlim[1],intervall),avgs, yerr = avg_errors[idx], label=f"Sample size: {avg_sizes[idx]}", linewidth = 3, linestyle = 'dashed', capsize = 5, elinewidth = 1, errorevery =(1,10))
         plt.ylabel("Yield")
         plt.xlabel("Minutes")
         plt.xlim(xlim)
@@ -347,8 +346,9 @@ def plot_hists(yields,jobname):
     for i in range(len((yield_bins))-1):
         plt.text(arr[1][i]+0.02,arr[0][i]+0.2,str(int(arr[0][i])))
     #plt.vlines(yield_bins,0,max(arr[0][:]),colors="red",linestyles='dotted')
-    plt.ylim(0,500)
-    fig.savefig(f"{output_dir}/{jobname}_Histogram")
+    #Ylim to be closest 100.
+    plt.ylim(0,round(max(arr[0])/100+1,0)*100)
+    fig.savefig(f"{output_dir}/{jobname}_Histogram, Total {len(yields)}")
         
 def filter_Yields(cellyields, meths):
     SYD = False

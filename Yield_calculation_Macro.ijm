@@ -89,7 +89,7 @@ setTool("rectangle");
 
 //run("Analyze Particles...", "add in_situ slice");
 maxsize = getNumber("Max size in pixels for particles", 150);
-run("Analyze Particles...", "size=5-"+maxsize+" pixel add in_situ slice"); // size has to be defined for each cell type to omit spurious particles but also capture all cells
+run("Analyze Particles...", "size=3-"+maxsize+" pixel add in_situ slice"); // size has to be defined for each cell type to omit spurious particles but also capture all cells
 selectWindow("yield_" + imagestack); // change name here
 waitForUser("Select image to measure, then hit OK");   
 run("Set Measurements...", "area mean limit display redirect=None decimal=3");
