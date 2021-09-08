@@ -50,7 +50,7 @@ def perform_Analysis(fp,work_name, batch = False,debug = True):
     
     cv2.destroyAllWindows()
     plt.close('all')
-    AOI_mode = "Ft_Masks"
+    AOI_mode = "Projection"
     tifs = []
     border = 100
     intervall = 5
@@ -144,6 +144,7 @@ def perform_Analysis(fp,work_name, batch = False,debug = True):
                 AOI_mode = str(settings['AOI_Mode'])
             except:
                 print("AOI Mode unknown")
+        #if('Sorting_Pos' in keys):
     outYields = dict()
     if(batch):      
         fl = os.listdir(fp)
@@ -196,12 +197,19 @@ def perform_Analysis(fp,work_name, batch = False,debug = True):
         mask = 0
         if("Projection" in AOI_mode):
             mask = create_Masks(yields,threshold)  
+            if(Debug):
+                cv2.imshow("Mask",mask*255)
         elif("Ft_Masks" in AOI_mode):
             mask = create_Masks_Ft([frame[border:imgheight-border,border*2:imgwidth-border*2]for frame in tif],threshold)
-            yields = yields*mask
-            mask = create_Masks(yields,1)
-        if(Debug):
-            cv2.imshow("Mask",mask*255)
+            #yields = yields*mask
+            #cnts = []
+            #for(yieldimg in yields):
+            #    newcnts, hrs = cv2.findContours(yieldimg,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
+            #    cnts.append(newcnts)
+            disp_mask = np.asarray(mask,dtype=np.uint8)
+            if(Debug):
+                cv2.imshow("Mask",disp_mask)
+        
         cnts,hrs = cv2.findContours(mask,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
         contimg = cv2.cvtColor(np.zeros_like(mask),cv2.COLOR_GRAY2BGR)
         drawn = cv2.drawContours(contimg,cnts,-1,(0,0,255),-1)
@@ -259,16 +267,17 @@ def perform_Analysis(fp,work_name, batch = False,debug = True):
                 for idx,part in enumerate(filteredYields):
                     yield_writer.writerow(part)    
                     tot_yield_writer.writerow(part)
+                #filteredYields.shape[1]-2
                 subs, names = subdivide_Yield(filteredYields[:,1:], threshold_size = subpopthreshold_size, disc_pos = 0,floor = subpopfloor)
         if(create_Plots):
-            plot_Values(subs,names, work_name, fn,fovidx, intervall)      
+            plot_Values(subs,names, work_name, fn,fovidx, intervall,floor=subpopfloor)      
         #For outside use, return our filtered yields
         outYields[f"{fn}"] = filteredYields
     if(create_Hists):
             unsorted_Yields = np.concatenate(list(outYields.values()))
             plot_hists(unsorted_Yields,work_name)
     return outYields
-    
+
 def reanalyze(yields, indexes):
     #If you want to reanalyze only specific numbered cells.
     manFilteredYields = [part for part in yields if part[0] in indexes]
@@ -307,7 +316,7 @@ def plot_Values(yields, names, jobname, filename, subjob, intervall = 5, rows = 
         xlim =[0,len(yields[0][0])*intervall]
     except:
         print(yields)
-        print("Not enough data points. Shutting down")
+        print("Population empty, could not plot values. ")
         return     
     ylim = [floor,0.7] 
     Position = range(1,tot + 1)
@@ -337,7 +346,7 @@ def plot_Values(yields, names, jobname, filename, subjob, intervall = 5, rows = 
     fig2 = plt.figure(f"{jobname}: Average_Yield")
     fig2.suptitle(f"{jobname}: Average Yield")              
     for idx, avgs in enumerate(avg_lines):
-        plt.errorbar(range(xlim[0],xlim[1],intervall),avgs, yerr = avg_errors[idx], label=f"Sample size: {avg_sizes[idx]}", linewidth = 3, linestyle = 'dashed', capsize = 5, elinewidth = 1, errorevery =(1,10))
+        plt.errorbar(range(xlim[0],xlim[1],intervall),avgs, yerr = avg_errors[idx], label=f"{names[idx]}", markersize = 3, marker='o',linewidth = 1.5, capsize = 2, elinewidth = 1, errorevery =(1,3))
         plt.ylabel("Yield")
         plt.xlabel("Minutes")
         plt.xlim(xlim)
@@ -351,7 +360,9 @@ def plot_hists(yields,jobname):
     output_dir = f"Output/{jobname}"
     yields = [row[1] for row in yields]
     fig = plt.figure(f"{jobname}")
-    fig.suptitle(f"{jobname}: Histogram of Yields")
+    fig.suptitle(f"{jobname}: Histogram of Yields. Total: {len(yields)}")
+    plt.xlabel("Yield")
+    plt.ylabel("Count")
     yield_bins = [0.2,0.25, 0.3,0.35, 0.4,0.45,0.5,0.55,0.6,0.65]
     arr = plt.hist(yields, bins=yield_bins)
     plt.xticks(yield_bins)
@@ -360,7 +371,7 @@ def plot_hists(yields,jobname):
     #plt.vlines(yield_bins,0,max(arr[0][:]),colors="red",linestyles='dotted')
     #Ylim to be closest 100.
     plt.ylim(0,round(max(arr[0])/100+1,0)*100)
-    fig.savefig(f"{output_dir}/{jobname}_Histogram, Total {len(yields)}")
+    fig.savefig(f"{output_dir}/{jobname}_Histogram")
         
 def filter_Yields(cellyields, meths):
     SYD = False
@@ -400,14 +411,15 @@ def subdivide_Yield(cellyields, method = "Static Bins",floor = 0, threshold_size
         #We can't know the sizes of the populations from the start
         subpops = []
         for idx in range(0,subs):
+            print(f"{idx*threshold_size} + {(idx+1)*threshold_size}")
             temp = []
             for cell in cellyields:
-                if(floor + (idx*threshold_size)) < cell[disc_pos] and cell[disc_pos] <= (floor+((idx+1)*threshold_size)):          
+                if(floor + (idx*threshold_size)) <= cell[disc_pos] and cell[disc_pos] < (floor+((idx+1)*threshold_size)):          
                     temp.append(cell)
             #Else it is empty
             if(len(temp) > 0):
                 subpops.append(temp)
-                name = f"Subpopulation: {idx}, size: {len(temp)}. Static threshold: {(floor + (idx*threshold_size)):.3f}-{(floor+((idx+1)*threshold_size)):.3f}"
+                name = f"{idx}. n: {len(temp)}. Threshold: {(floor + (idx*threshold_size)):.3f}-{(floor+((idx+1)*threshold_size)):.3f}"
                 names.append(name)          
     if(method == "Distribution"):
         #Create equally sized populations
@@ -494,8 +506,6 @@ def create_Masks_Ft(imgstack,maskthres=10):
     None.
 
     """
-    fC = 3
-    fS = 3
     Fo = imgstack[::2]
     th = []
     for i in range(len(Fo)):
@@ -504,7 +514,10 @@ def create_Masks_Ft(imgstack,maskthres=10):
         #th.append(img)
         #th.append(cv2.bilateralFilter(img,5,fC,fS))
         th.append(cv2.medianBlur(img,3))
-    return th
+    mask = np.sum(th, axis=0)
+    mask = mask.astype(np.uint8)
+    return mask
+    #return th
     
 
 
