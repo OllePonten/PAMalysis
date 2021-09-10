@@ -274,8 +274,12 @@ def perform_Analysis(fp,work_name, batch = False,debug = True):
         #For outside use, return our filtered yields
         outYields[f"{fn}"] = filteredYields
     if(create_Hists):
-            unsorted_Yields = np.concatenate(list(outYields.values()))
-            plot_hists(unsorted_Yields,work_name,subpopfloor)
+        unsorted_Yields = []
+        for x in list(outYields.values()):
+            unsorted_Yields = np.concatenate((unsorted_Yields, x[:,1]))
+        #print(len(list(outYields.values())))
+        #unsorted_Yields = np.concatenate((list(outYields.values())),axis=1)
+        plot_hists(unsorted_Yields,work_name,subpopfloor)
     return outYields
 
 def reanalyze(yields, indexes):
@@ -358,12 +362,11 @@ def plot_Values(yields, names, jobname, filename, subjob, intervall = 5, rows = 
 
 def plot_hists(yields,jobname, floor=0.2):
     output_dir = f"Output/{jobname}"
-    yields = [row[1] for row in yields]
     fig = plt.figure(f"{jobname}")
     fig.suptitle(f"{jobname}: Histogram of Yields. Total: {len(yields)}")
     plt.xlabel("Yield")
     plt.ylabel("Count")
-    yield_bins=np.linspace(floor,0.7,num=(0.7-floor)/0.05)
+    yield_bins=np.linspace(floor,0.7,num=(round((0.7-floor)/0.05)+1))
     #yield_bins = [0.2,0.25, 0.3,0.35, 0.4,0.45,0.5,0.55,0.6,0.65]
     arr = plt.hist(yields, bins=yield_bins)
     plt.xticks(yield_bins)
@@ -412,7 +415,6 @@ def subdivide_Yield(cellyields, method = "Static Bins",floor = 0, threshold_size
         #We can't know the sizes of the populations from the start
         subpops = []
         for idx in range(0,subs):
-            print(f"{idx*threshold_size} + {(idx+1)*threshold_size}")
             temp = []
             for cell in cellyields:
                 if(floor + (idx*threshold_size)) <= cell[disc_pos] and cell[disc_pos] < (floor+((idx+1)*threshold_size)):          
