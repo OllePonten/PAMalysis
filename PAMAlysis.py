@@ -209,7 +209,6 @@ def perform_Analysis(fp,work_name, batch = False,debug = True):
             disp_mask = np.asarray(mask,dtype=np.uint8)
             if(Debug):
                 cv2.imshow("Mask",disp_mask)
-        
         cnts,hrs = cv2.findContours(mask,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
         contimg = cv2.cvtColor(np.zeros_like(mask),cv2.COLOR_GRAY2BGR)
         drawn = cv2.drawContours(contimg,cnts,-1,(0,0,255),-1)
@@ -322,7 +321,7 @@ def plot_Values(yields, names, jobname, filename, subjob, intervall = 5, rows = 
         print(yields)
         print("Population empty, could not plot values. ")
         return     
-    ylim = [floor,0.7] 
+    ylim = [0,1] 
     Position = range(1,tot + 1)
     #fig = plt.figure(figsize=(5*rows, 3*columns))
     plt.close(f"{jobname}: Subpopulations")
@@ -351,6 +350,8 @@ def plot_Values(yields, names, jobname, filename, subjob, intervall = 5, rows = 
     fig2.suptitle(f"{jobname}: Average Yield")              
     for idx, avgs in enumerate(avg_lines):
         plt.errorbar(range(xlim[0],xlim[1],intervall),avgs, yerr = avg_errors[idx], label=f"{names[idx]}", markersize = 3, marker='o',linewidth = 1.5, capsize = 2, elinewidth = 1, errorevery =(1,3))
+        #plt.plot(range(xlim[0],xlim[1],intervall),avgs, label=f"Sample size: {avg_sizes[idx]}", linewidth = 3, linestyle = 'dashed')
+        #plt.errorbar(range(xlim[0],xlim[1],intervall),avgs, yerr = avg_errors[idx], label=f"Sample size: {avg_sizes[idx]}", linewidth = 3, linestyle = 'dashed', capsize = 5, elinewidth = 1, errorevery =(1,10))
         plt.ylabel("Yield")
         plt.xlabel("Minutes")
         plt.xlim(xlim)
@@ -369,12 +370,14 @@ def plot_hists(yields,jobname, floor=0.2):
     yield_bins=np.linspace(floor,0.7,num=(round((0.7-floor)/0.05)+1))
     #yield_bins = [0.2,0.25, 0.3,0.35, 0.4,0.45,0.5,0.55,0.6,0.65]
     arr = plt.hist(yields, bins=yield_bins)
+    avg = np.mean(yields)
     plt.xticks(yield_bins)
     for i in range(len((yield_bins))-1):
         plt.text(arr[1][i]+0.02,arr[0][i]+0.2,str(int(arr[0][i])))
     #plt.vlines(yield_bins,0,max(arr[0][:]),colors="red",linestyles='dotted')
     #Ylim to be closest 100.
     plt.ylim(0,round(max(arr[0])/100+1,0)*100)
+    plt.axvline(x=avg,color='red',linestyle='--')
     fig.savefig(f"{output_dir}/{jobname}_Histogram")
         
 def filter_Yields(cellyields, meths):
@@ -456,10 +459,10 @@ def make_Yield_Images(img_stack):
     #Yield is defined as Fv/Fm or (Fm-Fo)/Fm
     Yield = []
     for i in range(len(Fo)):
-        Mask = np.where(Fo[i] > 7,1,0)
+        Mask = np.where(Fo[i] > 6,1,0)
         #Emulate remove outliers from imageJ (Which is just a median filter)
-        #Mask = Mask.astype(np.uint8)        
-        #Mask = cv2.bilateralFilter(Mask,2,3,3)
+        Mask = Mask.astype(np.uint8)        
+        Mask = cv2.medianBlur(Mask,3)
         Fv = np.subtract(Fm[i],Fo[i],dtype = np.float32)
         #Floor to zero
         Fv = np.clip(Fv,0,255)*Mask
