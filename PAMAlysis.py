@@ -62,6 +62,7 @@ def perform_Analysis(fp,work_name, batch = False,debug = True):
     create_Hists = False
     create_Plots = True
     Debug=True
+    globalcoordinates = True
     start_point=0
     end_point=0
     filterMethods = {"SYD":0.2}
@@ -179,10 +180,27 @@ def perform_Analysis(fp,work_name, batch = False,debug = True):
             tif = tif[0:2]
         tif_tags = {}
         #Get all tags
+        globalx = 0
+        globaly = 0
         with tifffile.TiffFile(i) as tif_file:
             for tag in tif_file.pages[0].tags.values():
                 name, value = tag.name,tag.value
                 tif_tags[name] = value
+            desc = tif_tags['ImageDescription']
+            if(globalcoordinates):
+                try:
+                    globalx = tif_tags["xposition"]
+                except:
+                    xposind = desc.find("xposition")+len("xposition")+1
+                    globalx = int(desc[xposind:xposind+desc[xposind:].find(".")])
+                    #globalx = filter(str.isdigit, xpos_str)
+                    #globalx = "".join(globalx)
+                try:
+                    globaly = tif_tags["yposition"]
+                except:
+                    yposind = desc.find("yposition")+len("yposition")+1
+                    globaly = int(desc[yposind:yposind+desc[yposind:].find(".")])
+                
         imgwidth = 640
         imgheight = 480
         if(border > 0):
@@ -197,8 +215,6 @@ def perform_Analysis(fp,work_name, batch = False,debug = True):
         mask = 0
         if("Projection" in AOI_mode):
             mask = create_Masks(yields,threshold)  
-            if(Debug):
-                cv2.imshow("Mask",mask*255)
         elif("Ft_Masks" in AOI_mode):
             mask = create_Masks_Ft([frame[border:imgheight-border,border*2:imgwidth-border*2]for frame in tif],threshold)
             #yields = yields*mask
@@ -207,8 +223,8 @@ def perform_Analysis(fp,work_name, batch = False,debug = True):
             #    newcnts, hrs = cv2.findContours(yieldimg,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
             #    cnts.append(newcnts)
             disp_mask = np.asarray(mask,dtype=np.uint8)
-            if(Debug):
-                cv2.imshow("Mask",disp_mask)
+        if(Debug):
+            cv2.imshow("Mask",disp_mask)
         cnts,hrs = cv2.findContours(mask,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
         contimg = cv2.cvtColor(np.zeros_like(mask),cv2.COLOR_GRAY2BGR)
         drawn = cv2.drawContours(contimg,cnts,-1,(0,0,255),-1)
@@ -227,10 +243,14 @@ def perform_Analysis(fp,work_name, batch = False,debug = True):
         if(Debug):
             cv2.imshow("Filtered conts",filteredMask)  
         #Output table
-        meanYields = np.zeros(shape=(len(size_filt_cnts),len(yields)+1))
+        meanYields = np.zeros(shape=(len(size_filt_cnts),len(yields)+3))
         for cellidx, cnt in enumerate(size_filt_cnts):
             #Get minimum bounding rect
             rect = cv2.boundingRect(cnt)
+            if(globalcoordinates):
+                cellcenter = [globalx+(rect[1]+rect[3])/2,globaly+(rect[0]+rect[2])/2]
+            else:
+                cellcenter = [(rect[1]+rect[3])/2,(rect[0]+rect[2])/2]
             cellMinis = yields[:,rect[1]-1:rect[1]+rect[3]+1,rect[0]-1:rect[0]+rect[2]+1]
             filteredMask = cv2.putText(filteredMask,str(cellidx), (rect[0],rect[1]+int(rect[3]/2)), cv2.FONT_HERSHEY_PLAIN, 0.5,(0,255,0),thickness = 1)
             zeroedidx = []
@@ -250,9 +270,11 @@ def perform_Analysis(fp,work_name, batch = False,debug = True):
                         meanYield = 0
                     if(timeidx == 0):
                         meanYields[cellidx,0] = cellidx
-                meanYields[cellidx,timeidx+1] = meanYield      
+                        meanYields[cellidx,1] = cellcenter[0]
+                        meanYields[cellidx,2] = cellcenter[1]
+                meanYields[cellidx,timeidx+3] = meanYield      
         #THRESHOLD FILTER
-        filteredYields = filter_Yields(meanYields, filterMethods)
+        filteredYields = filter_Yields(meanYields[:,:], filterMethods)
         print(f"Yields remaining after filter: {len(filteredYields)}")
         cv2.imshow("Numbered masks",filteredMask)
         cv2.imwrite(f'{output_folder}/' + work_name + '_' + fn + "numbered masks.tif", filteredMask)       
@@ -267,7 +289,7 @@ def perform_Analysis(fp,work_name, batch = False,debug = True):
                     yield_writer.writerow(part)    
                     tot_yield_writer.writerow(part)
                 #filteredYields.shape[1]-2
-                subs, names = subdivide_Yield(filteredYields[:,1:], threshold_size = subpopthreshold_size, disc_pos = 0,floor = subpopfloor)
+                subs, names = subdivide_Yield(filteredYields[:,3:], threshold_size = subpopthreshold_size, disc_pos = 0,floor = subpopfloor)
         if(create_Plots):
             plot_Values(subs,names, work_name, fn,fovidx, intervall,floor=subpopfloor)      
         #For outside use, return our filtered yields
@@ -275,7 +297,7 @@ def perform_Analysis(fp,work_name, batch = False,debug = True):
     if(create_Hists):
         unsorted_Yields = []
         for x in list(outYields.values()):
-            unsorted_Yields = np.concatenate((unsorted_Yields, x[:,1]))
+            unsorted_Yields = np.concatenate((unsorted_Yields, x[:,3]))
         #print(len(list(outYields.values())))
         #unsorted_Yields = np.concatenate((list(outYields.values())),axis=1)
         plot_hists(unsorted_Yields,work_name,subpopfloor)
@@ -358,26 +380,34 @@ def plot_Values(yields, names, jobname, filename, subjob, intervall = 5, rows = 
         plt.ylim(ylim)
         plt.yticks(np.arange(ylim[0], ylim[1], step=(ylim[1]-ylim[0])/10), labels=None)
     fig2.legend(bbox_to_anchor=(0.95,0.85), ncol = 2)
+    #fig2.legend(loc="upper left", ncol = 2)
     fig2.tight_layout()
     fig2.savefig(fname = f"{output_dir}/{jobname}_Average_Yields")
 
 def plot_hists(yields,jobname, floor=0.2):
+    print(f"Creating histograms for {jobname}")
     output_dir = f"Output/{jobname}"
     fig = plt.figure(f"{jobname}")
     fig.suptitle(f"{jobname}: Histogram of Yields. Total: {len(yields)}")
     plt.xlabel("Yield")
     plt.ylabel("Count")
     yield_bins=np.linspace(floor,0.7,num=(round((0.7-floor)/0.05)+1))
-    #yield_bins = [0.2,0.25, 0.3,0.35, 0.4,0.45,0.5,0.55,0.6,0.65]
-    arr = plt.hist(yields, bins=yield_bins)
-    avg = np.mean(yields)
+    yields = yields[(yields>0)]
+    below = len([i for i in yields if i < 0.1])
+    arr = plt.hist(yields, bins=yield_bins, label = f"Total cells: {len(yields)}. Below 0.1: {below}")
+    fig.suptitle(f"{jobname}: Histogram of Yields")   
     plt.xticks(yield_bins)
+    avg=np.mean(yields)
     for i in range(len((yield_bins))-1):
         plt.text(arr[1][i]+0.02,arr[0][i]+0.2,str(int(arr[0][i])))
     #plt.vlines(yield_bins,0,max(arr[0][:]),colors="red",linestyles='dotted')
     #Ylim to be closest 100.
-    plt.ylim(0,round(max(arr[0])/100+1,0)*100)
-    plt.axvline(x=avg,color='red',linestyle='--')
+
+    roof = round(max(arr[0])/100+1,0)*100
+    plt.ylim(0,roof)
+    plt.legend()
+    plt.axvline(avg,linestyle='dashed')
+    plt.text(avg-0.05,roof*1.01,f"Average: {avg:.3f}")
     fig.savefig(f"{output_dir}/{jobname}_Histogram")
         
 def filter_Yields(cellyields, meths):
@@ -393,13 +423,15 @@ def filter_Yields(cellyields, meths):
         SYD = True
     for idx,cell in enumerate(cellyields):
         if(SYD):
-          for time in range(1,len(cell)-1):
-                  if(cell[time]-cell[time+1] > sydthres):
-                     #Remove, likely fell away
-                     #Tail function so we don't remove on single frame brightness
-                      if(time+2 <= len(cell)-2):
-                          if(cell[time+3] <= cell[time]):
-                              remidxs.add(idx)
+          for time in range(3,len(cell)-1):
+              if(cell[time]-cell[time+1] > sydthres):
+                  #Remove, likely fell away
+                  #Tail function so we don't remove on single frame brightness
+                  if(time+2 <= len(cell)-2):
+                      if(cell[time+3] <= cell[time]):
+                          remidxs.add(idx)
+                      else:
+                          remidxs.add(idx)
     outputmsg += f"Filtered: {len(remidxs)} based on threshold: {sydthres}. {list(remidxs)}"
     print(outputmsg)
     return np.delete(cellyields,list(remidxs),axis=0)
@@ -487,13 +519,14 @@ def create_Masks(imgstack, maskthres = 20):
     summed = np.sum(imgstack,axis = 0) 
     #Only keep pixels as part of a cell if they have an average of threshold pixel
     #intensity over the entire stack, i.e. the length of the stack.
-    summed = summed*255
-    threshold = imgstack.shape[0]*maskthres
+    summed = (summed*255)/imgstack.shape[0]
+    threshold = maskthres
     #Simple threshold
     summed[summed < threshold] = 0
     summed = summed.astype(np.uint8)
     #summed = cv2.medianBlur(summed,3)    
-    np.clip(summed,0,255,out=summed)
+    #np.clip(summed,0,255,out=summed)
+    summed[summed > 0] = 1
     return summed    
 
 def create_Masks_Ft(imgstack,maskthres=10):
@@ -516,27 +549,13 @@ def create_Masks_Ft(imgstack,maskthres=10):
     th = []
     for i in range(len(Fo)):
         src = np.array(Fo[i])
-        ret,img=cv2.threshold(src,maskthres,1, cv2.THRESH_BINARY);
-        #th.append(img)
-        #th.append(cv2.bilateralFilter(img,5,fC,fS))
+        ret,img=cv2.threshold(src,maskthres,1, cv2.THRESH_BINARY)
         th.append(cv2.medianBlur(img,3))
     mask = np.sum(th, axis=0)
+    mask[mask>0]=1
     mask = mask.astype(np.uint8)
     return mask
-    #return th
     
-
-
-def extract_Grid():
-    #Extracting grid
-    #Return binary mask of interest
-    return 0
-    
-def template_matching():
-    #For using a template image of the microwell instead
-    #Return binary mask of interest
-    return 0
-
 global data
 if __name__ == '__main__':
     global data
