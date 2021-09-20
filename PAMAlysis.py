@@ -186,21 +186,23 @@ def perform_Analysis(fp,work_name, batch = False,debug = True):
             for tag in tif_file.pages[0].tags.values():
                 name, value = tag.name,tag.value
                 tif_tags[name] = value
-            desc = tif_tags['ImageDescription']
-            if(globalcoordinates):
-                try:
-                    globalx = tif_tags["xposition"]
-                except:
-                    xposind = desc.find("xposition")+len("xposition")+1
-                    globalx = int(desc[xposind:xposind+desc[xposind:].find(".")])
-                    #globalx = filter(str.isdigit, xpos_str)
-                    #globalx = "".join(globalx)
-                try:
-                    globaly = tif_tags["yposition"]
-                except:
-                    yposind = desc.find("yposition")+len("yposition")+1
-                    globaly = int(desc[yposind:yposind+desc[yposind:].find(".")])
-                
+            if('ImageDescription' in tif_tags.keys()):
+                desc = tif_tags['ImageDescription']
+                if(globalcoordinates):
+                    try:
+                        globalx = tif_tags["xposition"]
+                    except:
+                        xposind = desc.find("xposition")+len("xposition")+1
+                        globalx = int(desc[xposind:xposind+desc[xposind:].find("\n")])
+                    try:
+                        globaly = tif_tags["yposition"]
+                    except:
+                        yposind = desc.find("yposition")+len("yposition")+1  
+                        try:
+                            globaly = int(desc[yposind:yposind+desc[yposind:].find("\n")])    
+                        except:
+                            globaly = int(desc[yposind:])   
+                    
         imgwidth = 640
         imgheight = 480
         if(border > 0):
@@ -222,7 +224,7 @@ def perform_Analysis(fp,work_name, batch = False,debug = True):
             #for(yieldimg in yields):
             #    newcnts, hrs = cv2.findContours(yieldimg,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
             #    cnts.append(newcnts)
-            disp_mask = np.asarray(mask,dtype=np.uint8)
+        disp_mask = np.asarray(mask,dtype=np.uint8)
         if(Debug):
             cv2.imshow("Mask",disp_mask)
         cnts,hrs = cv2.findContours(mask,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
