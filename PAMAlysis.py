@@ -61,8 +61,8 @@ def perform_Analysis(fp,work_name, batch = False,debug = True):
     threshold = 20
     create_Hists = False
     create_Plots = True
-    Debug=True
-    globalcoordinates = True
+    Debug=False
+    globalcoordinates = False
     start_point=0
     end_point=0
     filterMethods = {"SYD":0.2}
@@ -154,11 +154,16 @@ def perform_Analysis(fp,work_name, batch = False,debug = True):
         print(f"Analysing following files: {str(tifs)}")
     else:
         tifs = [fp]
+    output_folder = f'Output/{work_name}'
     try:
-        output_folder = f'Output/{work_name}'
         os.makedirs(output_folder)
     except OSError:
         print("Could not create output folder")
+    try:
+        os.remove(f'{output_folder}/' + work_name+'AllYields.csv')
+    except:
+        pass
+    
     for fovidx, i in enumerate(tifs):
         if('/' in i):
             fn = i.split('/')[-1][:-4]
@@ -169,7 +174,7 @@ def perform_Analysis(fp,work_name, batch = False,debug = True):
         except:
             input(f"Could not load image: {fn} Please check filename")
             sys.exit()
-        if(len(tif) > 6):
+        if(len(tif) > 10):
             print(f"Analysing time points: {start_point}:{end_point}")
             #tif = np.concatenate((tif[0:2],tif[4+(start_point*2):4+(end_point*2)]))
             if(end_point==0):
@@ -186,8 +191,8 @@ def perform_Analysis(fp,work_name, batch = False,debug = True):
             for tag in tif_file.pages[0].tags.values():
                 name, value = tag.name,tag.value
                 tif_tags[name] = value
-            desc = tif_tags['ImageDescription']
-            if(globalcoordinates):
+            if('ImageDescription' in tif_tags.keys() and globalcoordinates):
+                desc = tif_tags['ImageDescription']
                 try:
                     globalx = tif_tags["xposition"]
                 except:
@@ -222,7 +227,7 @@ def perform_Analysis(fp,work_name, batch = False,debug = True):
             #for(yieldimg in yields):
             #    newcnts, hrs = cv2.findContours(yieldimg,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
             #    cnts.append(newcnts)
-            disp_mask = np.asarray(mask,dtype=np.uint8)
+        disp_mask = np.asarray(mask,dtype=np.uint8)
         if(Debug):
             cv2.imshow("Mask",disp_mask)
         cnts,hrs = cv2.findContours(mask,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
