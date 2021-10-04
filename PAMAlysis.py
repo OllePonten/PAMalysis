@@ -64,8 +64,9 @@ def perform_Analysis(fp,work_name, batch = False,debug = True):
     Debug=False
     globalcoordinates = False
     start_point=0
+    legends = True
     end_point=-1
-    filterMethods = {"SYD":0.2}
+    filterMethods = {"SYD":0.3}
     if(batch):
         settings = load_PAM_Params(fp+"/PAMSet.txt")
     else:
@@ -143,6 +144,11 @@ def perform_Analysis(fp,work_name, batch = False,debug = True):
         if('AOI_Mode' in keys):
             try:
                 AOI_mode = str(settings['AOI_Mode'])
+            except:
+                print("AOI Mode unknown")
+        if('legends' in keys):
+            try:
+                legends = bool(int(settings['legends']))
             except:
                 print("AOI Mode unknown")
         #if('Sorting_Pos' in keys):
@@ -297,7 +303,7 @@ def perform_Analysis(fp,work_name, batch = False,debug = True):
                 #filteredYields.shape[1]-2
                 subs, names = subdivide_Yield(filteredYields[:,3:], threshold_size = subpopthreshold_size, disc_pos = 0,floor = subpopfloor)
         if(create_Plots):
-            plot_Values(subs,names, work_name, fn,fovidx, intervall,floor=subpopfloor)      
+            plot_Values(subs,names, work_name, fn,fovidx, intervall,floor=subpopfloor,legends = legends)      
         #For outside use, return our filtered yields
         outYields[f"{fn}"] = filteredYields
     if(create_Hists):
@@ -320,7 +326,8 @@ def reanalyze(yields, indexes):
     manFilteredYields = [part for part in yields if part[0] in indexes]
     return manFilteredYields
     
-def plot_Values(yields, names, jobname, filename, subjob, intervall = 5, floor = 0.2):
+
+def plot_Values(yields, names, jobname, filename, subjob, intervall = 5, rows = -1, columns = -1, mode = "Lines", floor = 0.2,legends=True):
     #Assumes that yields is formatted as yields.shape = [n(subplots),n(samples),n(values)]
     rows = -1
     columns = -1
@@ -342,12 +349,10 @@ def plot_Values(yields, names, jobname, filename, subjob, intervall = 5, floor =
         columns = 1
         if(tot % 2 == 0):
             columns = int(tot/2)
-            
             rows = 2
         elif(tot % 2 == 1):
             columns = int(tot/2 + 1)
             rows = 2
-    
     avg_lines = []
     avg_errors = []
     avg_sizes = []
@@ -368,7 +373,7 @@ def plot_Values(yields, names, jobname, filename, subjob, intervall = 5, floor =
         # add every single subplot to the figure with a for loop
         ax = fig.add_subplot(rows,columns,Position[k])
         ax.set_title(names[k])
-        ax.set_ylabel("Yield")
+        ax.set_ylabel("Fv/Fm")
         ax.set_xlabel("Minutes")
         ax.set_ylim(ylim)
         ax.set_xlim(xlim)
@@ -384,11 +389,16 @@ def plot_Values(yields, names, jobname, filename, subjob, intervall = 5, floor =
     fig.savefig(fname =f"{output_dir}/{jobname}_{subjob}_total_yields")
     #plt.close(f"{jobname}: Average_Yield")
     fig2 = plt.figure(f"{jobname}: Average_Yield")
-    fig2.suptitle(f"{jobname}: Average Yield")              
+    fig2.suptitle(f"{jobname}: Average Fv/Fm")       
+    avg_of_all = np.mean(avg_line,axis=0)       
     for idx, avgs in enumerate(avg_lines):
-        plt.errorbar(range(xlim[0],xlim[1],intervall),avgs, yerr = avg_errors[idx], label=f"{names[idx]}", markersize = 3, marker='o',linewidth = 1.5, capsize = 2, elinewidth = 1, errorevery =(1,3))
+        if(legends):
+            plt.errorbar(range(xlim[0],xlim[1],intervall),avgs, yerr = avg_errors[idx], label=f"{names[idx]}", markersize = 3, marker='o',linewidth = 1.5, capsize = 2, elinewidth = 1, errorevery =(1,3))
+        else:
+            plt.errorbar(range(xlim[0],xlim[1],intervall),avgs, yerr = avg_errors[idx], markersize = 3, marker='o',linewidth = 1.5, capsize = 2, elinewidth = 1, errorevery =(1,3))           
         #plt.plot(range(xlim[0],xlim[1],intervall),avgs, label=f"Sample size: {avg_sizes[idx]}", linewidth = 3, linestyle = 'dashed')
         #plt.errorbar(range(xlim[0],xlim[1],intervall),avgs, yerr = avg_errors[idx], label=f"Sample size: {avg_sizes[idx]}", linewidth = 3, linestyle = 'dashed', capsize = 5, elinewidth = 1, errorevery =(1,10))
+        plt.plot(avg_of_all)
         plt.ylabel("Yield")
         plt.xlabel("Minutes")
         plt.xlim(xlim)
@@ -410,13 +420,13 @@ def plot_hists(yields,jobname, floor=0.2,time_point=0, i_color = "red"):
     print(f"Creating histograms for {jobname}")
     output_dir = f"Output/{jobname}"
     col_fig = plt.figure(f"{jobname}")
-    plt.xlabel("Yield")
+    plt.xlabel("Fv/Fm")
     plt.ylabel("Count")
-    yield_bins=np.linspace(floor,0.7,num=(round((0.7-floor)/0.05)+1))
+    yield_bins=np.linspace(floor,0.8,num=(round((0.8-floor)/0.05)+1))
     yields = yields[(yields>0)]
     below = len([i for i in yields if i < 0.1])
     arr = plt.hist(yields, bins=yield_bins, alpha=0.7, label = f"n: {len(yields)}. <0.1: {below}. T: {time_point} mins", color = i_color, edgecolor="black")
-    col_fig.suptitle(f"{jobname}: Histogram of Yields.")   
+    col_fig.suptitle(f"{jobname}: Histogram of Fv/Fm.")   
     plt.xticks(yield_bins)
     avg=np.mean(yields)
     roof = round(max(arr[0])/100+1,0)*100
@@ -453,8 +463,8 @@ def filter_Yields(cellyields, meths):
                   if(time+2 <= len(cell)-2):
                       if(cell[time+3] <= cell[time]):
                           remidxs.add(idx)
-                      else:
-                          remidxs.add(idx)
+                  else:
+                    remidxs.add(idx)
     outputmsg += f"Filtered: {len(remidxs)} based on threshold: {sydthres}. {list(remidxs)}"
     print(outputmsg)
     return np.delete(cellyields,list(remidxs),axis=0)
