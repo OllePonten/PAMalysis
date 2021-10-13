@@ -58,15 +58,18 @@ def perform_Analysis(fp,work_name, batch = False,debug = True):
     maxsize = 60
     subpopthreshold_size = 0.3
     subpopfloor = 0.1
-    threshold = 20
+    threshold = 0.08
     create_Hists = False
     create_Plots = True
     Debug=False
     globalcoordinates = False
     start_point=0
     legends = True
+    errorbars = True
     end_point=-1
+    hist_end=-1
     filterMethods = {"SYD":0.3}
+    cell_map_fp=""
     if(batch):
         settings = load_PAM_Params(fp+"/PAMSet.txt")
     else:
@@ -125,6 +128,12 @@ def perform_Analysis(fp,work_name, batch = False,debug = True):
             except:
                 print("Histogram badly formatted")
                 pass        
+        if('Hist_end' in keys):
+            try:
+                hist_end = int(settings['Hist_end'])
+            except:
+                print("Hist end point badly formatted")
+                pass
         if('Plots' in keys):
             try:
                 create_Plots = bool(int(settings['Plots']))
@@ -151,7 +160,21 @@ def perform_Analysis(fp,work_name, batch = False,debug = True):
                 legends = bool(int(settings['legends']))
             except:
                 print("AOI Mode unknown")
-        #if('Sorting_Pos' in keys):
+        if('errorbars' in keys):
+            try:
+                errorbars = bool(int(settings['errorbars']))
+            except:
+                print("Bad format")
+        if('Cell_Map' in keys and AOI_mode=="Cell_Map"):
+            try:
+                cell_map_fp=str(settings['Cell_Map'])
+            except:
+                print("Cell map fp badly formatted")
+        if('global_coordinates' in keys):
+            try:
+                globalcoordinates=bool(int(settings['global_coordinates']))
+            except:
+                print("Global coordinates badly formatted")
     outYields = dict()
     if(batch):      
         fl = os.listdir(fp)
@@ -184,10 +207,10 @@ def perform_Analysis(fp,work_name, batch = False,debug = True):
         if(len(tif) > 6):
             #Analyse everythin
             if(end_point == -1):
-                end_point = len(tif)
+                end_point = len(tif)-4
             print(f"Analysing time points: {start_point}:{end_point}")
             #Analyse everything           
-            tif = tif[4+(start_point*2):4+(end_point*2)]
+            tif = tif[4+(start_point*2):6+(end_point*2)]
         else:
             tif = tif[0:2]
         tif_tags = {}
@@ -229,11 +252,8 @@ def perform_Analysis(fp,work_name, batch = False,debug = True):
             mask = create_Masks(yields,threshold)  
         elif("Ft_Masks" in AOI_mode):
             mask = create_Masks_Ft([frame[border:imgheight-border,border*2:imgwidth-border*2]for frame in tif],threshold)
-            #yields = yields*mask
-            #cnts = []
-            #for(yieldimg in yields):
-            #    newcnts, hrs = cv2.findContours(yieldimg,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
-            #    cnts.append(newcnts)
+        elif("Cell_Map" in AOI_mode):
+            mask = tifffile.imread(cell_map_fp)
         disp_mask = np.asarray(mask,dtype=np.uint8)
         if(Debug):
             cv2.imshow("Mask",disp_mask)
@@ -251,7 +271,9 @@ def perform_Analysis(fp,work_name, batch = False,debug = True):
                 size_filt_cnts.append(cnt)
         print(f"Contours remaining filtering with size thresholds: {minsize}-{maxsize} pixels are {len(size_filt_cnts)}")
         #Draw a filtered mask
+        numberedMask = None
         filteredMask = cv2.drawContours(cv2.cvtColor(np.zeros_like(mask,dtype=np.uint8),cv2.COLOR_GRAY2BGR),size_filt_cnts,-1,(255,255,255),-1)
+        filtered_img_to_save = filteredMask
         if(Debug):
             cv2.imshow("Filtered conts",filteredMask)  
         #Output table
@@ -260,11 +282,11 @@ def perform_Analysis(fp,work_name, batch = False,debug = True):
             #Get minimum bounding rect
             rect = cv2.boundingRect(cnt)
             if(globalcoordinates):
-                cellcenter = [globalx+(rect[1]+rect[3])/2,globaly+(rect[0]+rect[2])/2]
+                cellcenter = [border + globalx+int((rect[1]+rect[3])/2)*4,border*2 + globaly+int((rect[0]+rect[2])/2)*4]
             else:
-                cellcenter = [(rect[1]+rect[3])/2,(rect[0]+rect[2])/2]
+                cellcenter = [border + int((rect[1]+rect[3])/2)*4,border*2 + int((rect[0]+rect[2])/2)*4]
             cellMinis = yields[:,rect[1]-1:rect[1]+rect[3]+1,rect[0]-1:rect[0]+rect[2]+1]
-            filteredMask = cv2.putText(filteredMask,str(cellidx), (rect[0],rect[1]+int(rect[3]/2)), cv2.FONT_HERSHEY_PLAIN, 0.5,(0,255,0),thickness = 1)
+            numberedMask = cv2.putText(filteredMask,str(cellidx), (rect[0],rect[1]+int(rect[3]/2)), cv2.FONT_HERSHEY_PLAIN, 0.5,(0,255,0),thickness = 1)
             zeroedidx = []
             for timeidx,img in enumerate(cellMinis):  
                 with warnings.catch_warnings():
@@ -277,7 +299,7 @@ def perform_Analysis(fp,work_name, batch = False,debug = True):
                         meanYield = np.nanmean(np.where(img!=0,img,np.nan))  
                     except Warning:
                         if(cellidx not in zeroedidx):
-                            print(f"Nan/Zero yield enc. Timeindex: {timeidx}. Cellindex: {cellidx}. Setting zero")
+                            print(f"Nan/Zero yield enc. Timeindex: {timeidx+start_point}. Cellindex: {cellidx}. Setting zero")
                             zeroedidx.append(cellidx)
                         meanYield = 0
                     if(timeidx == 0):
@@ -288,8 +310,9 @@ def perform_Analysis(fp,work_name, batch = False,debug = True):
         #THRESHOLD FILTER
         filteredYields = filter_Yields(meanYields[:,:], filterMethods)
         print(f"Yields remaining after filter: {len(filteredYields)}")
-        cv2.imshow("Numbered masks",filteredMask)
-        cv2.imwrite(f'{output_folder}/' + work_name + '_' + fn + "numbered masks.tif", filteredMask)       
+        cv2.imshow("Numbered masks",numberedMask)
+        cv2.imwrite(f'{output_folder}/' + work_name + '_' + fn + "numbered_masks.tif", numberedMask) 
+        cv2.imwrite(f'{output_folder}/' + work_name + '_' + fn + "cell_mask.tif", filtered_img_to_save)
         with open(f'{output_folder}/' + work_name+'AllYields.csv', mode = 'a', newline="") as tot_file:
             tot_yield_writer = csv.writer(tot_file, delimiter = ",",quotechar = '"', quoting = csv.QUOTE_MINIMAL)
             with open(f'{output_folder}/' + work_name +'_'+ fn + '.csv', mode = 'w',newline="") as pos_file:
@@ -303,7 +326,7 @@ def perform_Analysis(fp,work_name, batch = False,debug = True):
                 #filteredYields.shape[1]-2
                 subs, names = subdivide_Yield(filteredYields[:,3:], threshold_size = subpopthreshold_size, disc_pos = 0,floor = subpopfloor)
         if(create_Plots):
-            plot_Values(subs,names, work_name, fn,fovidx, intervall,floor=subpopfloor,legends = legends)      
+            plot_Values(subs,names, work_name, fn,fovidx, intervall,floor=subpopfloor,legends = legends,errorbars=errorbars)      
         #For outside use, return our filtered yields
         outYields[f"{fn}"] = filteredYields
     if(create_Hists):
@@ -311,13 +334,13 @@ def perform_Analysis(fp,work_name, batch = False,debug = True):
         unsorted_yields_end = []
         for x in list(outYields.values()):
             unsorted_yields_start = np.concatenate((unsorted_yields_start, x[:,3+start_point]))
-            if(start_point != end_point):                
-                unsorted_yields_end = np.concatenate((unsorted_yields_end, x[:,int(end_point/2)]))
+            if(hist_end != -1):                
+                unsorted_yields_end = np.concatenate((unsorted_yields_end, x[:,3+hist_end-start_point]))
         #print(len(list(outYields.values())))
         #unsorted_Yields = np.concatenate((list(outYields.values())),axis=1)       
-        plot_hists(unsorted_yields_start,work_name,subpopfloor,start_point,"red")
-        if(start_point != end_point):
-            plot_hists(unsorted_yields_end,work_name,subpopfloor,int((end_point/2)-1)*intervall,"green")
+        plot_hists(unsorted_yields_start,work_name,subpopfloor,start_point*intervall,"red")
+        if(hist_end != -1):
+            plot_hists(unsorted_yields_end,work_name,subpopfloor,(hist_end-start_point)*intervall,"green")
             
     return outYields
 
@@ -327,7 +350,7 @@ def reanalyze(yields, indexes):
     return manFilteredYields
     
 
-def plot_Values(yields, names, jobname, filename, subjob, intervall = 5, rows = -1, columns = -1, mode = "Lines", floor = 0.2,legends=True):
+def plot_Values(yields, names, jobname, filename, subjob, intervall = 5, rows = -1, columns = -1, mode = "Lines", floor = 0.2,legends=True, errorbars=True):
     #Assumes that yields is formatted as yields.shape = [n(subplots),n(samples),n(values)]
     rows = -1
     columns = -1
@@ -357,12 +380,18 @@ def plot_Values(yields, names, jobname, filename, subjob, intervall = 5, rows = 
     avg_errors = []
     avg_sizes = []
     xlim = [0,0]
+    xstep = 0
+    
     try:
         xlim =[0,len(yields[0][0])*intervall]
     except:
         print(yields)
         print("Population empty, could not plot values. ")
         return     
+    if(xlim[1] <= 100):
+        xstep = 25
+    else:
+        xstep = round((xlim[1]+1)/100)*10
     ylim = [0,1] 
     Position = range(1,tot + 1)
     #fig = plt.figure(figsize=(5*rows, 3*columns))
@@ -385,6 +414,12 @@ def plot_Values(yields, names, jobname, filename, subjob, intervall = 5, rows = 
         avg_sizes.append(pop_size)
         for part in yields[k]:
             ax.plot(range(xlim[0],xlim[1],intervall),part, marker='o', markersize = 3, linewidth = 0.5)
+        plt.yticks(np.arange(ylim[0], ylim[1], step=(ylim[1]-ylim[0])/10), labels=None)
+        plt.xticks(np.arange(0,xlim[1],step=xstep))
+        ax.plot(range(xlim[0],xlim[1],intervall),part, marker='o', markersize = 3, linewidth = 6,linestyle='dashed',color="black")
+        plt.minorticks_on()
+        plt.grid(axis="y")
+
     fig.tight_layout(pad = 3.0)
     fig.savefig(fname =f"{output_dir}/{jobname}_{subjob}_total_yields")
     #plt.close(f"{jobname}: Average_Yield")
@@ -392,25 +427,21 @@ def plot_Values(yields, names, jobname, filename, subjob, intervall = 5, rows = 
     fig2.suptitle(f"{jobname}: Average Fv/Fm")       
     avg_of_all = np.mean(avg_line,axis=0)       
     for idx, avgs in enumerate(avg_lines):
-        if(legends):
+        if(legends and errorbars):
             plt.errorbar(range(xlim[0],xlim[1],intervall),avgs, yerr = avg_errors[idx], label=f"{names[idx]}", markersize = 3, marker='o',linewidth = 1.5, capsize = 2, elinewidth = 1, errorevery =(1,3))
         else:
-            plt.errorbar(range(xlim[0],xlim[1],intervall),avgs, yerr = avg_errors[idx], markersize = 3, marker='o',linewidth = 1.5, capsize = 2, elinewidth = 1, errorevery =(1,3))           
+            plt.errorbar(range(xlim[0],xlim[1],intervall),avgs, markersize = 3, marker='o',linewidth = 4, capsize = 2, elinewidth = 1, errorevery =(1,3),color="black")           
         #plt.plot(range(xlim[0],xlim[1],intervall),avgs, label=f"Sample size: {avg_sizes[idx]}", linewidth = 3, linestyle = 'dashed')
-        #plt.errorbar(range(xlim[0],xlim[1],intervall),avgs, yerr = avg_errors[idx], label=f"Sample size: {avg_sizes[idx]}", linewidth = 3, linestyle = 'dashed', capsize = 5, elinewidth = 1, errorevery =(1,10))
-        plt.plot(avg_of_all)
-        plt.ylabel("Yield")
+        #plt.plot(avg_of_all)
+        plt.ylabel("Fv/Fm")
         plt.xlabel("Minutes")
         plt.xlim(xlim)
         plt.ylim(ylim)
         plt.yticks(np.arange(ylim[0], ylim[1], step=(ylim[1]-ylim[0])/10), labels=None)
-        xstep = 0
-        if(xlim[1] <= 100):
-            xstep = 25
-        else:
-            xstep = round(int((xlim[1]+1)/10)/100)*100
         plt.xticks(np.arange(0,xlim[1],step=xstep))
         plt.minorticks_on()
+        plt.grid(axis="y")
+        
     fig2.legend(bbox_to_anchor=(0.95,0.85), ncol = 2)
     #fig2.legend(loc="upper left", ncol = 2)
     fig2.tight_layout()
@@ -423,23 +454,26 @@ def plot_hists(yields,jobname, floor=0.2,time_point=0, i_color = "red"):
     plt.xlabel("Fv/Fm")
     plt.ylabel("Count")
     yield_bins=np.linspace(floor,0.8,num=(round((0.8-floor)/0.05)+1))
-    yields = yields[(yields>0)]
-    below = len([i for i in yields if i < 0.1])
-    arr = plt.hist(yields, bins=yield_bins, alpha=0.7, label = f"n: {len(yields)}. <0.1: {below}. T: {time_point} mins", color = i_color, edgecolor="black")
+    below = len([i for i in yields if i <= floor])
+    yields = yields[(yields>=floor)]
+    arr = plt.hist(yields, bins=yield_bins, alpha=0.7, label = f"n: {len(yields)}. <= {floor}: {below}. T: {time_point} mins", color = i_color, edgecolor="black")
     col_fig.suptitle(f"{jobname}: Histogram of Fv/Fm.")   
     plt.xticks(yield_bins)
     avg=np.mean(yields)
     roof = round(max(arr[0])/100+1,0)*100
+    #Make sure roof stays the same to keep scaling.
+    if(roof < plt.ylim()[1]):
+        roof = plt.ylim()[1]
+    plt.ylim(0,roof)
     for i in range(len((yield_bins))-1):
         if(i_color=="red"):
             plt.text(arr[1][i]+0.01,arr[0][i]+0.2,str(int(arr[0][i])),color="red")
             plt.axvline(avg,linestyle='dashed',color="red")
-            plt.text(avg-0.13,roof*1.01,f"Average: {avg:.3f}",color="red")
+            plt.text(avg-0.05,roof*1.05,f"Mean: {avg:.3f}",color="red")
         else:
-            plt.text(arr[1][i]+0.03,arr[0][i]+0.2,str(int(arr[0][i])),color="green")
-            plt.axvline(avg,linestyle='dashed',color="green")
-            plt.text(avg+0.02,roof*0.96,f"{avg:.3f}",color="green")
-    plt.ylim(0,roof)
+            plt.text(arr[1][i]+0.03,arr[0][i]+0.2,str(int(arr[0][i])),color=i_color)
+            plt.axvline(avg,linestyle='dashed',color=i_color)
+            plt.text(avg-0.05,roof,f"Mean: {avg:.3f}",color=i_color)
     plt.legend(loc="best")
     col_fig.savefig(f"{output_dir}/{jobname}")
         
@@ -448,6 +482,7 @@ def filter_Yields(cellyields, meths):
     sydthres = 1
     #For uniqueness, use set
     remidxs = set()
+    tail=5
     outputmsg = ""
     if('SYD' in meths.keys()):
         #Sudden Yield Drop. Filter based on corresponding threshold
