@@ -52,13 +52,13 @@ def perform_Analysis(fp,work_name, batch = False,debug = True):
     plt.close('all')
     AOI_mode = "Projection"
     tifs = []
-    border = 100
+    border = 75
     intervall = 5
     minsize = 5
     maxsize = 60
     subpopthreshold_size = 0.3
     subpopfloor = 0.1
-    threshold = 0.08
+    threshold = 0.06
     create_Hists = False
     create_Plots = True
     Debug=False
@@ -70,6 +70,8 @@ def perform_Analysis(fp,work_name, batch = False,debug = True):
     hist_end=-1
     filterMethods = {"SYD":0.3}
     cell_map_fp=""
+    sorting_meth = "Static Bins"
+    sorting_pos=1
     if(batch):
         settings = load_PAM_Params(fp+"/PAMSet.txt")
     else:
@@ -175,6 +177,16 @@ def perform_Analysis(fp,work_name, batch = False,debug = True):
                 globalcoordinates=bool(int(settings['global_coordinates']))
             except:
                 print("Global coordinates badly formatted")
+        if('Sorting_Method' in keys):
+            try:
+                sorting_meth = str(settings['Sorting_Method'])
+            except:
+                print("Unknown sorting method")
+        if('Sorting_Pos' in keys):
+            try:
+                sorting_pos = int(settings['Sorting_Pos'])
+            except:
+                print("Unknown sorting ")
     outYields = dict()
     if(batch):      
         fl = os.listdir(fp)
@@ -313,18 +325,21 @@ def perform_Analysis(fp,work_name, batch = False,debug = True):
         cv2.imshow("Numbered masks",numberedMask)
         cv2.imwrite(f'{output_folder}/' + work_name + '_' + fn + "numbered_masks.tif", numberedMask) 
         cv2.imwrite(f'{output_folder}/' + work_name + '_' + fn + "cell_mask.tif", filtered_img_to_save)
+        subs, names,sortedYields = subdivide_Yield(filteredYields, method = sorting_meth, threshold_size = subpopthreshold_size, disc_pos = sorting_pos,floor = subpopfloor)
         with open(f'{output_folder}/' + work_name+'AllYields.csv', mode = 'a', newline="") as tot_file:
             tot_yield_writer = csv.writer(tot_file, delimiter = ",",quotechar = '"', quoting = csv.QUOTE_MINIMAL)
+            if(isinstance(settings,dict)):
+                tot_yield_writer.writerow(settings.items() )
+            tot_yield_writer.writerow(range(0,len(sortedYields[0])*intervall,intervall))
             with open(f'{output_folder}/' + work_name +'_'+ fn + '.csv', mode = 'w',newline="") as pos_file:
                 yield_writer = csv.writer(pos_file, delimiter = ",",quotechar = '"', quoting = csv.QUOTE_MINIMAL)
                 yield_writer.writerow(fn)
+                yield_writer.writerow(range(0,len(sortedYields[0])*intervall,intervall))
                 if(isinstance(settings,dict)):
                     yield_writer.writerow(settings.items() )
-                for idx,part in enumerate(filteredYields):
+                for idx,part in enumerate(sortedYields):
                     yield_writer.writerow(part)    
-                    tot_yield_writer.writerow(part)
-                #filteredYields.shape[1]-2
-                subs, names = subdivide_Yield(filteredYields[:,3:], threshold_size = subpopthreshold_size, disc_pos = 0,floor = subpopfloor)
+                    tot_yield_writer.writerow(part)                
         if(create_Plots):
             plot_Values(subs,names, work_name, fn,fovidx, intervall,floor=subpopfloor,legends = legends,errorbars=errorbars)      
         #For outside use, return our filtered yields
@@ -355,6 +370,7 @@ def plot_Values(yields, names, jobname, filename, subjob, intervall = 5, rows = 
     rows = -1
     columns = -1
     color = None
+    base = 3
     output_dir = f"Output/{jobname}"
     if(subjob%3==0):
         color = [0,0,np.random.rand()]
@@ -383,7 +399,7 @@ def plot_Values(yields, names, jobname, filename, subjob, intervall = 5, rows = 
     xstep = 0
     
     try:
-        xlim =[0,len(yields[0][0])*intervall]
+        xlim =[0,(len(yields[0][0])-base)*intervall]
     except:
         print(yields)
         print("Population empty, could not plot values. ")
@@ -398,7 +414,7 @@ def plot_Values(yields, names, jobname, filename, subjob, intervall = 5, rows = 
     plt.close(f"{jobname}: Subpopulations")
     fig = plt.figure(f"{jobname}: Subpopulations",figsize = (6*columns,rows*5))
     fig.suptitle("Subpopulations")
-    for k in range(tot):
+    for k,subyields in enumerate(yields):
         # add every single subplot to the figure with a for loop
         ax = fig.add_subplot(rows,columns,Position[k])
         ax.set_title(names[k])
@@ -406,13 +422,14 @@ def plot_Values(yields, names, jobname, filename, subjob, intervall = 5, rows = 
         ax.set_xlabel("Minutes")
         ax.set_ylim(ylim)
         ax.set_xlim(xlim)
-        avg_line = (np.mean(yields[k][:],axis=0))
-        avg_error = (np.std(yields[k][:],axis=0))
-        pop_size = len(yields[k][:])
+        subyields = [trim_yield[3:] for trim_yield in subyields]
+        avg_line = (np.mean(subyields,axis=0))
+        avg_error = (np.std(subyields,axis=0))
+        pop_size = len(subyields)
         avg_lines.append(avg_line)
         avg_errors.append(avg_error)
         avg_sizes.append(pop_size)
-        for part in yields[k]:
+        for part in subyields:
             ax.plot(range(xlim[0],xlim[1],intervall),part, marker='o', markersize = 3, linewidth = 0.5)
         plt.yticks(np.arange(ylim[0], ylim[1], step=(ylim[1]-ylim[0])/10), labels=None)
         plt.xticks(np.arange(0,xlim[1],step=xstep))
@@ -430,9 +447,9 @@ def plot_Values(yields, names, jobname, filename, subjob, intervall = 5, rows = 
         if(legends and errorbars):
             plt.errorbar(range(xlim[0],xlim[1],intervall),avgs, yerr = avg_errors[idx], label=f"{names[idx]}", markersize = 3, marker='o',linewidth = 1.5, capsize = 2, elinewidth = 1, errorevery =(1,3))
         else:
-            plt.errorbar(range(xlim[0],xlim[1],intervall),avgs, markersize = 3, marker='o',linewidth = 4, capsize = 2, elinewidth = 1, errorevery =(1,3),color="black")           
-        #plt.plot(range(xlim[0],xlim[1],intervall),avgs, label=f"Sample size: {avg_sizes[idx]}", linewidth = 3, linestyle = 'dashed')
-        #plt.plot(avg_of_all)
+            plt.errorbar(range(xlim[0],xlim[1],intervall),avgs, yerr = avg_errors[idx], markersize = 3, marker='o',linewidth = 1.5, capsize = 2, elinewidth = 1, errorevery =(1,3))           
+        #plt.errorbar(range(xlim[0],xlim[1],intervall),avgs, yerr = avg_errors[idx], label=f"Sample size: {avg_sizes[idx]}", linewidth = 3, linestyle = 'dashed', capsize = 5, elinewidth = 1, errorevery =(1,10))
+        
         plt.ylabel("Fv/Fm")
         plt.xlabel("Minutes")
         plt.xlim(xlim)
@@ -482,7 +499,7 @@ def filter_Yields(cellyields, meths):
     sydthres = 1
     #For uniqueness, use set
     remidxs = set()
-    tail=5
+    tail = 5
     outputmsg = ""
     if('SYD' in meths.keys()):
         #Sudden Yield Drop. Filter based on corresponding threshold
@@ -495,8 +512,8 @@ def filter_Yields(cellyields, meths):
               if(cell[time]-cell[time+1] > sydthres):
                   #Remove, likely fell away
                   #Tail function so we don't remove on single frame brightness
-                  if(time+2 <= len(cell)-2):
-                      if(cell[time+3] <= cell[time]):
+                  if(time+tail <= len(cell)-1):
+                      if(cell[time+tail] == 0):
                           remidxs.add(idx)
                   else:
                     remidxs.add(idx)
@@ -504,15 +521,16 @@ def filter_Yields(cellyields, meths):
     print(outputmsg)
     return np.delete(cellyields,list(remidxs),axis=0)
               
-def subdivide_Yield(cellyields, method = "Static Bins",floor = 0, threshold_size = 0.1, disc_pos = 1):
+def subdivide_Yield(cellyields, method = "Static Bins",floor = 0, threshold_size = 0.25, disc_pos = 1):
     #Several modes for finding subpopulations
     #Static Value = Divides up in subpopulations based on the yield value in disc pos 
     #using static bins of threshold_size
     #Distribution = Subpopulates based on distributions based on threshold size so that each
     #subpopulation contains sample_size*threshold_size samples
     #disc_pos selects what time-position to use when comparing values
-    subpops = []  
+    sortedYields = []  
     names = []
+    base=3
     if(method == "Static Bins"):
         subs = int((1-floor)/threshold_size)
         #We can't know the sizes of the populations from the start
@@ -520,26 +538,32 @@ def subdivide_Yield(cellyields, method = "Static Bins",floor = 0, threshold_size
         for idx in range(0,subs):
             temp = []
             for cell in cellyields:
-                if(floor + (idx*threshold_size)) <= cell[disc_pos] and cell[disc_pos] < (floor+((idx+1)*threshold_size)):          
+                if(floor + (idx*threshold_size)) <= cell[disc_pos+base] and cell[disc_pos+base] < (floor+((idx+1)*threshold_size)):          
                     temp.append(cell)
+                    sortedYields.append(cell)
             #Else it is empty
             if(len(temp) > 0):
                 subpops.append(temp)
                 name = f"{idx}. n: {len(temp)}. Threshold: {(floor + (idx*threshold_size)):.3f}-{(floor+((idx+1)*threshold_size)):.3f}"
                 names.append(name)          
     if(method == "Distribution"):
+        print(f"Sorting based on quantiles. Sorting position: {disc_pos}. Quantile size: {threshold_size}")
         #Create equally sized populations
-        subs = len(cellyields)*threshold_size
         #We can know the sizes of the populations from the start.
-        subpops = np.nan(shape = int(1/threshold_size,subs,cellyields.shape[2]))
+        subpops = []
         #Sort based on disc_pos value
-        ntile_size = len(cellyields*threshold_size)
-        cellyields[cellyields[:,disc_pos].argsort()]
+        ntile_size = int(cellyields.shape[0]*threshold_size)-1
+        cellyields = cellyields[cellyields[:,disc_pos+base].argsort()]
+        sortedYields = cellyields
         for idx in range(0,int(1/threshold_size)):
+            subpops.append(cellyields[0:ntile_size])
+            if(cellyields.shape[0] > ntile_size):
+                cellyields = np.delete(cellyields,np.s_[0,ntile_size],0)                
             #Grab percentile between idx to idx + threshold            
             subpops[idx] = cellyields[idx*ntile_size:(idx+1)*ntile_size]
-            names.append(f"Subpopulation: {idx}. Percentage range: {idx*10}-{(idx+1)*10}")     
-    return subpops, names
+            names.append(f"n:{len(subpops[idx])} Quantile: {idx*threshold_size:.2f}-{(idx+1)*threshold_size:.2f}")     
+        subpops=np.asarray(subpops)
+    return subpops, names, sortedYields
      
 def make_Yield_Images(img_stack):
     """
@@ -562,7 +586,7 @@ def make_Yield_Images(img_stack):
         Mask = np.where(Fo[i] > 7,1,0)
         #Emulate remove outliers from imageJ (Which is just a median filter)
         Mask = Mask.astype(np.uint8)        
-        Mask = cv2.medianBlur(Mask,3)
+       #Mask = cv2.medianBlur(Mask,3)
         Mask = np.where(Mask>0,1,0)
         Fv = np.subtract(Fm[i],Fo[i],dtype = np.float32)
         #Floor to zero
@@ -622,7 +646,7 @@ def create_Masks_Ft(imgstack,maskthres=0.1):
         src = np.array(Fo[i])
         ret,img=cv2.threshold(src,int(threshold),1, cv2.THRESH_BINARY)
         th.append(cv2.medianBlur(img,3))
-    mask = np.sum(th, axis=0)
+    mask = np.sum(th,axis=0)
     mask[mask>0]=1
     mask = mask.astype(np.uint8)
     return mask
