@@ -1,0 +1,7 @@
+version                : 1.0
+flag_microplate_dataset: True
+feat_start             : 4
+mapping:
+ dbname: MorphologyAnalysis_posneg_WithICFs_Median500M_sit_P_Per_Image
+ metadata_tag:  Image_Metadata_
+ cast_as_factor: True
