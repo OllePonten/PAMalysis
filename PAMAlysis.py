@@ -338,15 +338,16 @@ def perform_Analysis(fp,work_name, batch = False,debug = True):
         with open(f'{output_folder}/' + work_name+'AllYields.csv', mode = 'a', newline="") as tot_file:
             tot_yield_writer = csv.writer(tot_file, delimiter = ",",quotechar = '"', quoting = csv.QUOTE_MINIMAL)
             tot_yield_writer.writerow("Index, XPosition, YPosition")
+            times = [0,0,0] + list(range(0,len(sortedYields[0])*intervall,intervall))
             if(isinstance(settings,dict)):
                 tot_yield_writer.writerow(settings.items() )
-            tot_yield_writer.writerow(range(0,len(sortedYields[1])*intervall,intervall))
+            tot_yield_writer.writerow(times)
             with open(f'{output_folder}/' + work_name +'_'+ fn + '.csv', mode = 'w',newline="") as pos_file:
                 yield_writer = csv.writer(pos_file, delimiter = ",",quotechar = '"', quoting = csv.QUOTE_MINIMAL)
                 yield_writer.writerow(fn)
                 if(isinstance(settings,dict)):
                     yield_writer.writerow(settings.items() )
-                    yield_writer.writerow(range(0,len(sortedYields[0])*intervall,intervall))
+                    yield_writer.writerow(times)
                 for idx,part in enumerate(sortedYields):
                     yield_writer.writerow(part)    
                     tot_yield_writer.writerow(part)                 
@@ -544,7 +545,7 @@ def subdivide_Yield(cellyields, method = "Static Bins",floor = 0, threshold_size
     #disc_pos selects what time-position to use when comparing values
     sortedYields = []  
     names = []
-    base=3
+    base=2
     if(method == "Static Bins"):
         subs = int((1-floor)/threshold_size)
         #We can't know the sizes of the populations from the start
@@ -614,7 +615,7 @@ def make_Yield_Images(img_stack):
         Yield.append(cYield)
     return np.asarray(Yield)
     
-def create_Masks(imgstack, maskthres = 0.05):
+def create_Masks(imgstack, maskthres = 0.04):
     """
     Creates masks based on z-projection of yield values and a thresholding operation
 
