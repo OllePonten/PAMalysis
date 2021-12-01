@@ -101,6 +101,16 @@ def perform_Analysis(fp,work_name, batch = False,debug = True):
                 subpopthreshold_size = float(settings['subpop_size'])
             except:
                 print("subpopthreshold badly formatted")
+        if('Sorting_Method' in keys):
+            try:
+                sorting_meth = str(settings['Sorting_Method'])
+            except:
+                print("Unknown sorting method")
+        if('Sorting_Pos' in keys):
+            try:
+                sorting_pos = int(settings['Sorting_Pos'])
+            except:
+                print("Unknown sorting ")
         if('border' in keys):
             try:
                 border = int(settings['border'])
@@ -179,16 +189,7 @@ def perform_Analysis(fp,work_name, batch = False,debug = True):
                 globalcoordinates=bool(int(settings['global_coordinates']))
             except:
                 print("Global coordinates badly formatted")
-        if('Sorting_Method' in keys):
-            try:
-                sorting_meth = str(settings['Sorting_Method'])
-            except:
-                print("Unknown sorting method")
-        if('Sorting_Pos' in keys):
-            try:
-                sorting_pos = int(settings['Sorting_Pos'])
-            except:
-                print("Unknown sorting ")
+        print(settings)
     outYields = dict()
     if(batch):      
         fl = os.listdir(fp)
@@ -215,11 +216,12 @@ def perform_Analysis(fp,work_name, batch = False,debug = True):
             fn = current_tif
         try:
             tif = tifffile.imread(current_tif)
+            print(f"Analysing {fn}.tif")
         except:
             input(f"Could not load image: {fn} Please check filename")
             sys.exit()
         if(len(tif) > 6):
-            #Analyse everythin
+            #Analyse everything
             if(end_point == -1):
                 end_point = len(tif)-4
             print(f"Analysing time points: {start_point}:{end_point}")
@@ -332,13 +334,15 @@ def perform_Analysis(fp,work_name, batch = False,debug = True):
         #THRESHOLD FILTER
         filteredYields = filter_Yields(meanYields[:,:], filterMethods)
         print(f"Yields remaining after filter: {len(filteredYields)}")
+        if(len(filteredYields) == 0):
+            print("No cell detected in FoV. Ignoring.")
+            continue
         cv2.imshow("Numbered masks",numberedMask)
         cv2.imwrite(f'{output_folder}/' + work_name + '_' + fn + "numbered_masks.tif", numberedMask) 
         subs, names,sortedYields = subdivide_Yield(filteredYields, method = sorting_meth, threshold_size = subpopthreshold_size, disc_pos = sorting_pos,floor = subpopfloor)
         with open(f'{output_folder}/' + work_name+'AllYields.csv', mode = 'a', newline="") as tot_file:
             tot_yield_writer = csv.writer(tot_file, delimiter = ",",quotechar = '"', quoting = csv.QUOTE_MINIMAL)
-            tot_yield_writer.writerow("Index, XPosition, YPosition")
-            times = [0,0,0] + list(range(0,len(sortedYields[0])*intervall,intervall))
+            times = ["Index", "XPosition", "YPosition"] + list(range(0,len(sortedYields[0])*intervall-3,intervall))
             if(isinstance(settings,dict)):
                 tot_yield_writer.writerow(settings.items() )
             tot_yield_writer.writerow(times)
@@ -679,6 +683,9 @@ if __name__ == '__main__':
     job_name = ""
     args = sys.argv[1:]
     print("Args:" + str(args))
+    if(len(args)==0):
+        print("Arguments is empty, exiting.")
+        sys.exit(1)
     if("/help" in args or "/h" in args or len(args)== 0 in args):
         print("This is the PAMalysis software which computes quantum yields of tiffstacks output"
               + " from ImagingWinGigE v2.51d.\n")
@@ -700,7 +707,7 @@ if __name__ == '__main__':
                     findex = args.index("/d") + 1     
                 except:
                     input("No directory flag found. Enter key to exit")
-                    sys.exit()
+                    sys.exit(1)
             fp = args[findex]
         else:
             #Assume we are just grabbing all tif stacks in current folder
@@ -713,7 +720,7 @@ if __name__ == '__main__':
                 findex = args.index("/f") + 1     
             except:
                 input("No filename flag found. Enter key to exit")
-                sys.exit()
+                sys.exit(1)
         fp = args[findex]
     try:
         jindex = args.index("/job") + 1
@@ -722,7 +729,7 @@ if __name__ == '__main__':
             jindex = args.index("/j") + 1
         except:
             input("No jobname found. Enter key to exit")
-            sys.exit()
+            sys.exit(1)
         job_name = args[jindex]
     data = perform_Analysis(fp,job_name, batch = batch_flag)
     
