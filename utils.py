@@ -47,33 +47,6 @@ def create_stitched_image(fp, borderx,bordery,timeframe):
     hconcat = np.hstack((vconcat[:]))
     cv2.imshow("Large img", hconcat)
     return hconcat
-
-def read_xticks(fp):
-    num_list = []
-    with open(fp,'r') as fh:
-        for line in fh:
-            num_list.append((float(line)))
-    return num_list
-
-def read_cor_xticks_stack(fp):
-    import tifffile
-    import numpy as np
-    positions = read_xticks(fp+"/focus_pos.txt")
-    stack = tifffile.imread(fp+"/Z_stack.tif")
-    cor_pos =[0]
-    cor_pos.extend(positions[10:0:-1])
-    cor_pos.extend(positions[11:])
-    cor_stack = np.append(stack[0,None],stack[10:0:-1][:,:],axis=0)
-    cor_stack = np.append(cor_stack,stack[11:][:,:],axis=0)
-    return cor_pos,cor_stack
-
-def perform_scoring(fp):
-    import focus_test
-    pos,imgs = read_cor_xticks_stack(fp)
-    xticks, fs, z_cor = focus_test.AF_Scoring(IMGs = imgs,xticks=pos,fp=fp)
-    with open(fp+".txt", mode = "w") as fh:
-        for i in range(len(xticks)):
-            fh.write(str(xticks[i]) + "," + str(fs[i]) + "," + str(z_cor[i][0])+"\n")
             
 def create_ICF(images, kernel, only_Fo=True):
     #Based on Pipeline for illumination correction of images for high-throughput microscopy
