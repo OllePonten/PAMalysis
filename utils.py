@@ -48,20 +48,21 @@ def create_stitched_image(fp, borderx,bordery,timeframe):
     cv2.imshow("Large img", hconcat)
     return hconcat
             
-def create_ICF(images, kernel, only_Fo=True):
+def create_ICF(images, kernel, index = 1, only_Fo=True):
     #Based on Pipeline for illumination correction of images for high-throughput microscopy
     #S. SINGH, M.-A. BRAY, T.R. JONES* & A. E . CARPENTER, doi: 10.1111/jmi.12178
-    import cv2, numpy as np, scipy as sp
+    import numpy as np, scipy as sp, matplotlib
     import scipy.ndimage as nimg
     #Assume images are in form (x,n*2,640x480)
     Firsts = []
     for stack in images:
-        Firsts.append(stack[1])
+        Firsts.append(stack[index])
     mean_img = np.sum(Firsts,axis=0,dtype=np.uint16)
-    smoothed_img = nimg.median_filter(mean_img,size=(kernel,kernel),mode="reflect")
+    smoothed_img = nimg.median_filter(mean_img,size=(kernel,kernel),mode="nearest")
     smoothed_img = smoothed_img.astype(np.float64)
     smoothed_img *= (255/np.max(smoothed_img))
     smoothed_img = smoothed_img.astype(np.uint8)
-    cv2.imshow("Smooth",smoothed_img)
+    matplotlib.pyplot.imshow(smoothed_img)
+    matplotlib.pyplot.title(f"{index},{kernel}")
 
         

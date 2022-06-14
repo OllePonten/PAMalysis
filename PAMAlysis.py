@@ -20,6 +20,8 @@ import warnings
 
 DEBUG = False
 
+global filenames
+
 def load_PAM_Params(fp = "PAMSet.txt"):
     try:
         with open(fp, mode='r') as file:
@@ -32,7 +34,7 @@ def load_PAM_Params(fp = "PAMSet.txt"):
         print("No pamset text file found, proceeding with defaults")
         return []
 
-def perform_Analysis(fp,work_name, batch = False,debug = True):
+def perform_Analysis(fp,work_name, batch = False, pamset=None, debug = True):
     
     """
 
@@ -50,9 +52,15 @@ def perform_Analysis(fp,work_name, batch = False,debug = True):
 
     """
     global DEBUG
+    if(pamset):
+        fp_pamset=fp+"/" + pamset
+    else:
+        fp_pamset=fp + "/PAMSet.txt"
+    print(fp_pamset)
     
     cv2.destroyAllWindows()
     plt.close('all')
+    #### DEFAULT SETTINGS ####
     AOI_mode = "Projection"
     tifs = []
     border = 75
@@ -75,13 +83,11 @@ def perform_Analysis(fp,work_name, batch = False,debug = True):
     cell_map_fp=""
     sorting_meth = "Static Bins"
     sorting_pos=1
-    #Minimum distance between particles centers.
     minimum_dist = 10
-    if(batch):
-        settings = load_PAM_Params(fp+"/PAMSet.txt")
-    else:
-        settings = load_PAM_Params()
+    #########################
+    settings = load_PAM_Params(fp_pamset)
     output_folder = ""
+    filenames = []
     if(len(settings) > 0):
         keys = settings.keys()
         if('minsize' in keys):
@@ -102,6 +108,8 @@ def perform_Analysis(fp,work_name, batch = False,debug = True):
         if('subpop_size' in keys):
             try:
                 subpopthreshold_size = float(settings['subpop_size'])
+                if(subpopfloor + subpopthreshold_size > 1):
+                    subpopthreshold_size = float(1 - subpopfloor)
             except:
                 print("subpopthreshold badly formatted")
         if('Sorting_Method' in keys):
@@ -223,6 +231,7 @@ def perform_Analysis(fp,work_name, batch = False,debug = True):
         except:
             input(f"Could not load image: {fn} Please check filename")
             sys.exit()
+        print(f"Read in file: {current_tif} with {int(len(tif)/2-4)} time points")
         if(len(tif) > 6):
             #Analyse everything
             if(end_point == -1):
@@ -230,6 +239,7 @@ def perform_Analysis(fp,work_name, batch = False,debug = True):
             print(f"Analysing time points: {start_point}:{end_point}")
             #Analyse everything           
             tif = tif[4+(start_point*2):6+(end_point*2)]
+            print(4+(start_point*2))
         else:
             tif = tif[0:2]
         tif_tags = {}
@@ -337,18 +347,19 @@ def perform_Analysis(fp,work_name, batch = False,debug = True):
         #THRESHOLD FILTER
         filteredYields = filter_Yields(meanYields[:,:], filterMethods)
         print(f"Yields remaining after filter: {len(filteredYields)}")
-        if(len(filteredYields) == 0):
-            print("No cell detected in FoV. Ignoring.")
+        if(len(filteredYields)==0):
+            print("No yields remaining. Ending analysis of current file")
             continue
         cv2.imshow("Numbered masks",numberedMask)
         cv2.imwrite(f'{output_folder}/' + work_name + '_' + fn + "numbered_masks.tif", numberedMask) 
         subs, names,sortedYields = subdivide_Yield(filteredYields, method = sorting_meth, threshold_size = subpopthreshold_size, disc_pos = sorting_pos,floor = subpopfloor)
         with open(f'{output_folder}/' + work_name+'AllYields.csv', mode = 'a', newline="") as tot_file:
             tot_yield_writer = csv.writer(tot_file, delimiter = ",",quotechar = '"', quoting = csv.QUOTE_MINIMAL)
-            times = ["Index", "XPosition", "YPosition"] + list(range(0,len(sortedYields[0])*intervall-3,intervall))
-            if(isinstance(settings,dict)):
+            times = [0,0,0] + list(range(0,len(filteredYields[0]-3)*(intervall),intervall))
+            if(isinstance(settings,dict) and fovidx==0):
+                tot_yield_writer.writerow('Index, XPosition, YPosition')
                 tot_yield_writer.writerow(settings.items() )
-            tot_yield_writer.writerow(times)
+                tot_yield_writer.writerow(times)
             with open(f'{output_folder}/' + work_name +'_'+ fn + '.csv', mode = 'w',newline="") as pos_file:
                 yield_writer = csv.writer(pos_file, delimiter = ",",quotechar = '"', quoting = csv.QUOTE_MINIMAL)
                 yield_writer.writerow(fn)
@@ -463,7 +474,7 @@ def plot_Values(yields, names, jobname, filename, subjob, intervall = 5, rows = 
     avg_of_all = np.mean(avg_line,axis=0)       
     for idx, avgs in enumerate(avg_lines):
         if(legends and errorbars):
-            plt.errorbar(range(xlim[0],xlim[1],intervall),avgs, yerr = avg_errors[idx], label=f"{names[idx]}", markersize = 3, marker='o',linewidth = 2, capsize = 2, elinewidth = 1, errorevery =(1,5))
+            plt.errorbar(range(xlim[0],xlim[1],intervall),avgs, yerr = avg_errors[idx], label=f"{filename[-1],names[idx][3:]}", markersize = 3, marker='o',linewidth = 2, capsize = 2, elinewidth = 1, errorevery =(1,5))
         elif(errorbars):
             plt.errorbar(range(xlim[0],xlim[1],intervall),avgs, yerr = avg_errors[idx], markersize = 3, marker='o',linewidth = 2, capsize = 2, elinewidth = 1, errorevery =(1,5))
         else:
@@ -684,16 +695,17 @@ if __name__ == '__main__':
     batch_flag = False
     fp = ""
     job_name = ""
+    pam_path=None
     args = sys.argv[1:]
     print("Args:" + str(args))
     if(len(args)==0):
         print("Arguments is empty, exiting.")
         sys.exit(1)
-    if("/help" in args or "/h" in args or len(args)== 0 in args):
+    if("/help" in args or "/h" in args or len(args)== 0):
         print("This is the PAMalysis software which computes quantum yields of tiffstacks output"
               + " from ImagingWinGigE v2.51d.\n")
         print("Following options are available:\n")
-        print("[/batch /b] Sets the analysis to be in batch mode(analyses all files in a directory). Directory must then be provided with directory flag argument")
+        print("[/batch /b] Sets the analysis to be in batch mode(analyses all files in a directory). Directory can then be provided with directory flag argument, or if missing analysis is taken at wdir.")
         print("[/dir /d ] followed by DIRECTORY. string argument specificying relative path.\n ")
         print("[/file /f] Only useable if batch mode is not on. Analyses a single stack. \n")
         print("[/job /j] Sets the output folder name. \n")
@@ -734,7 +746,11 @@ if __name__ == '__main__':
             input("No jobname found. Enter key to exit")
             sys.exit(1)
         job_name = args[jindex]
-    data = perform_Analysis(fp,job_name, batch = batch_flag)
+    
+    if("/p" in args):
+        pam_path = str(args[args.index("/p")+1])
+        print(pam_path)
+    data = perform_Analysis(fp,job_name, batch = batch_flag, pamset = pam_path)
     
 def cleanup():
     import cv2
