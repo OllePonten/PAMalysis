@@ -15,6 +15,9 @@ import csv
 import pathlib
 import warnings
 
+#CALL SIG:
+#runfile('C:/Users/ollpo511/Documents/GitHub/PAMalysis/PAMAlysis.py', wdir='C:Users/ollpo511/Documents/Behrendt/Helps', args = '/b /dir 13_12_21_Yuan /j Yuan_13_12')
+
 DEBUG = False
 
 def load_PAM_Params(fp = "PAMSet.txt"):
@@ -56,7 +59,7 @@ def perform_Analysis(fp,work_name, batch = False,debug = True):
     intervall = 5
     minsize = 5
     maxsize = 60
-    subpopthreshold_size = 0.3
+    subpopthreshold_size = 0.9
     subpopfloor = 0.1
     threshold = 0.03
     create_Hists = False
