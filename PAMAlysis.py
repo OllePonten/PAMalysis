@@ -14,9 +14,10 @@ import os
 import csv   
 import pathlib
 import warnings
+import ipdb
 
 #CALL SIG:
-#runfile('C:/Users/ollpo511/Documents/GitHub/PAMalysis/PAMAlysis.py', wdir='C:Users/ollpo511/Documents/Behrendt/Helps', args = '/b /dir 13_12_21_Yuan /j Yuan_13_12')
+#runfile('C:/Users/ollpo511/Documents/GitHub/PAMalysis/PAMAlysis.py', wdir='C:Users/ollpo511/Documents', args = '/b /dir __DIR__ /j __JOBNAME__')
 
 DEBUG = False
 
@@ -26,6 +27,7 @@ def load_PAM_Params(fp = "PAMSet.txt"):
     try:
         with open(fp, mode='r') as file:
             lines = file.readlines()
+            lines = [line for line in lines if(line[0] != '[' and line[-1] != ']')]
             lines = [line.rstrip('\n') for line in lines]
             lines = [line.split('=') for line in lines]
             params = dict(lines)
@@ -34,7 +36,7 @@ def load_PAM_Params(fp = "PAMSet.txt"):
         print("No pamset text file found, proceeding with defaults")
         return []
 
-def perform_Analysis(fp,work_name, batch = False, pamset=None, debug = True):
+def perform_Analysis(fp,work_name, job_folder, batch = False, pamset=None, debug = True):
     
     """
 
@@ -52,11 +54,6 @@ def perform_Analysis(fp,work_name, batch = False, pamset=None, debug = True):
 
     """
     global DEBUG
-    if(pamset):
-        fp_pamset=fp+"/" + pamset
-    else:
-        fp_pamset=fp + "/PAMSet.txt"
-    print(fp_pamset)
     
     cv2.destroyAllWindows()
     plt.close('all')
@@ -80,12 +77,12 @@ def perform_Analysis(fp,work_name, batch = False, pamset=None, debug = True):
     end_point=-1
     hist_end=-1
     filterMethods = {"SYD":0.3}
-    cell_map_fp=""
+    cell_mask_fp=""
     sorting_meth = "Static Bins"
     sorting_pos=1
     minimum_dist = 10
     #########################
-    settings = load_PAM_Params(fp_pamset)
+    settings = load_PAM_Params(pamset)
     output_folder = ""
     filenames = []
     if(len(settings) > 0):
@@ -190,9 +187,11 @@ def perform_Analysis(fp,work_name, batch = False, pamset=None, debug = True):
                 errorbars = bool(int(settings['errorbars']))
             except:
                 print("Bad format")
-        if('Cell_Map' in keys and AOI_mode=="Cell_Map"):
+        if('Cell_mask' in keys and AOI_mode=="Cell_mask"):
             try:
-                cell_map_fp=str(settings['Cell_Map'])
+                
+                cell_mask_fp=job_folder + "/" + settings['Cell_mask']
+                print(f"Cell_mask_fp: {cell_mask_fp}")
             except:
                 print("Cell map fp badly formatted")
         if('global_coordinates' in keys):
@@ -283,12 +282,13 @@ def perform_Analysis(fp,work_name, batch = False, pamset=None, debug = True):
             mask = create_Masks(yields,threshold)  
         elif("Ft_Masks" in AOI_mode):
             mask = create_Masks_Ft([frame[border:imgheight-border,border*2:imgwidth-border*2]for frame in tif],threshold)
-        elif("Cell_Map" in AOI_mode):
-            mask = tifffile.imread(cell_map_fp)
+        elif("Cell_mask" in AOI_mode):
+            print(f"Reading: {cell_mask_fp} as cell mask image")
+            mask = tifffile.imread(cell_mask_fp,)
         disp_mask = np.asarray(mask,dtype=np.uint8)
         if(Debug):
             cv2.imshow("Mask",disp_mask)
-        cnts,hrs = cv2.findContours((mask*255).astype(np.uint8),cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
+        cnts,hrs = cv2.findContours(np.asarray(mask.astype(np.uint8)),cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
         contimg = cv2.cvtColor(np.zeros_like(mask),cv2.COLOR_GRAY2BGR)
         drawn = cv2.drawContours(contimg,cnts,-1,(0,0,255),-1)
         if(Debug):
@@ -308,12 +308,15 @@ def perform_Analysis(fp,work_name, batch = False, pamset=None, debug = True):
                     size_filt_cnts.append(cnt)
         print(f"Contours remaining filtering with size thresholds: {minsize}-{maxsize} pixels are {len(size_filt_cnts)}")
         #Draw a filtered mask
+        #filteredMask = cv2.drawContours(cv2.cvtColor(np.zeros_like(mask,dtype=np.uint8),cv2.COLOR_GRAY2BGR),size_filt_cnts,-1,(255,255,255),-1)
         filteredMask = cv2.drawContours(cv2.cvtColor(np.zeros_like(mask,dtype=np.uint8),cv2.COLOR_GRAY2BGR),size_filt_cnts,-1,(255,255,255),-1)
-        cv2.imwrite(f'{output_folder}/' + work_name + '_' + fn + "cell_mask.tif", filteredMask)
+        cell_mask_out = cv2.cvtColor(filteredMask,cv2.COLOR_BGR2GRAY)
+        cv2.imwrite(f'{output_folder}/' + work_name + '_' + fn + "cell_mask.tif", cell_mask_out)
         if(Debug):
             cv2.imshow("Filtered conts",filteredMask)  
         #Output table
         meanYields = np.zeros(shape=(len(size_filt_cnts),len(yields)+3))
+        numberedMask = cv2.resize(filteredMask,(filteredMask.shape[1] *2, filteredMask.shape[0] * 2),interpolation = cv2.INTER_CUBIC)
         for cellidx, cnt in enumerate(size_filt_cnts):
             #Get minimum bounding rect
             rect = cv2.boundingRect(cnt)
@@ -321,8 +324,8 @@ def perform_Analysis(fp,work_name, batch = False, pamset=None, debug = True):
                 cellcenter = [border + globalx+int((rect[0]+rect[2])/2)*4,border*2 + globaly+int((rect[1]+rect[3])/2)*4]
             else:
                 cellcenter = [border + int((rect[0]+rect[2])/2)*4,border*2 + int((rect[1]+rect[3])/2)*4]
-            cellMinis = yields[:,rect[1]-1:rect[1]+rect[3]+1,rect[0]-1:rect[0]+rect[2]+1]
-            numberedMask = cv2.putText(filteredMask,str(cellidx), (rect[0],rect[1]+int(rect[3]/2)), cv2.FONT_HERSHEY_PLAIN, 0.5,(0,255,0),thickness = 1)
+            cellMinis = yields[:,rect[1]-1:rect[1]+rect[3]+1,rect[0]-1:rect[0]+rect[2]+1]         
+            numberedMask = cv2.putText(numberedMask,str(cellidx), (rect[0]*2,(rect[1]+int(rect[3]/2))*2), cv2.FONT_HERSHEY_PLAIN, 1,(0,255,0),thickness = 1)
             zeroedidx = []
             for timeidx,img in enumerate(cellMinis):  
                 with warnings.catch_warnings():
@@ -441,7 +444,7 @@ def plot_Values(yields, names, jobname, filename, subjob, intervall = 5, rows = 
     Position = range(1,tot + 1)
     #fig = plt.figure(figsize=(5*rows, 3*columns))
     plt.close(f"{jobname}: Subpopulations")
-    fig = plt.figure(f"{jobname}: Subpopulations",figsize = (6*columns,rows*5))
+    fig = plt.figure(f"{filename}: Subpopulations",figsize = (6*columns,5*rows))
     fig.suptitle("Subpopulations")
     for k,subyields in enumerate(yields):
         # add every single subplot to the figure with a for loop
@@ -462,7 +465,7 @@ def plot_Values(yields, names, jobname, filename, subjob, intervall = 5, rows = 
             ax.plot(range(xlim[0],xlim[1],intervall),part, marker='o', markersize = 3, linewidth = 0.5)
         plt.yticks(np.arange(ylim[0], ylim[1], step=(ylim[1]-ylim[0])/7), labels=None)
         plt.xticks(np.arange(0,xlim[1],step=xstep))
-        ax.plot(range(xlim[0],xlim[1],intervall),part, marker='o', markersize = 3, linewidth = 6,linestyle='dashed',color="black")
+        ax.plot(range(xlim[0],xlim[1],intervall),avg_line, marker='o', markersize = 3, linewidth = 6,linestyle='dashed',color="black")
         plt.minorticks_on()
         plt.grid(axis="y")
 
@@ -697,6 +700,8 @@ if __name__ == '__main__':
     job_name = ""
     pam_path=None
     args = sys.argv[1:]
+    #All paths are relative to this
+    job_folder = str(pathlib.Path().absolute())   
     print("Args:" + str(args))
     if(len(args)==0):
         print("Arguments is empty, exiting.")
@@ -726,7 +731,7 @@ if __name__ == '__main__':
             fp = args[findex]
         else:
             #Assume we are just grabbing all tif stacks in current folder
-            fp = str(pathlib.Path().absolute())
+            fp = job_folder
     elif("/file" in args or "/f" in args):
         try:
             findex = args.index("/file") + 1
@@ -748,9 +753,11 @@ if __name__ == '__main__':
         job_name = args[jindex]
     
     if("/p" in args):
-        pam_path = str(args[args.index("/p")+1])
-        print(pam_path)
-    data = perform_Analysis(fp,job_name, batch = batch_flag, pamset = pam_path)
+        pam_path = job_folder + "/" + str(args[args.index("/p")+1])
+        #print(pam_path)
+    else:
+        pam_path = job_folder + "/PAMset.txt"
+    data = perform_Analysis(fp,job_name, job_folder, batch = batch_flag, pamset = pam_path)
     
 def cleanup():
     import cv2
