@@ -19,15 +19,16 @@ import ipdb
 #CALL SIG:
 #runfile('C:/Users/ollpo511/Documents/GitHub/PAMalysis/PAMAlysis.py', wdir='C:Users/ollpo511/Documents', args = '/b /dir __DIR__ /j __JOBNAME__')
 
+
+global filenames, DEBUG
 DEBUG = False
 
-global filenames
-
-def load_PAM_Params(fp = "PAMSet.txt"):
+def load_PAM_Params(fp = "PAMset.txt"):
     try:
         with open(fp, mode='r') as file:
             lines = file.readlines()
             lines = [line for line in lines if(line[0] != '[' and line[-1] != ']')]
+            lines = [line for line in lines if(line[0] != "#")]
             lines = [line.rstrip('\n') for line in lines]
             lines = [line.split('=') for line in lines]
             params = dict(lines)
@@ -36,7 +37,7 @@ def load_PAM_Params(fp = "PAMSet.txt"):
         print("No pamset text file found, proceeding with defaults")
         return []
 
-def perform_Analysis(fp,work_name, job_folder, batch = False, pamset=None, debug = True):
+def perform_Analysis(fp,work_name, job_folder, batch = False, pamset=None):
     
     """
 
@@ -69,7 +70,6 @@ def perform_Analysis(fp,work_name, job_folder, batch = False, pamset=None, debug
     threshold = 0.03
     create_Hists = False
     create_Plots = True
-    Debug=False
     globalcoordinates = False
     start_point=0
     legends = True
@@ -109,9 +109,9 @@ def perform_Analysis(fp,work_name, job_folder, batch = False, pamset=None, debug
                     subpopthreshold_size = float(1 - subpopfloor)
             except:
                 print("subpopthreshold badly formatted")
-        if('Sorting_Method' in keys):
+        if('sorting_method' in keys):
             try:
-                sorting_meth = str(settings['Sorting_Method'])
+                sorting_meth = str(settings['sorting_method'])
             except:
                 print("Unknown sorting method")
         if('Sorting_Pos' in keys):
@@ -187,10 +187,9 @@ def perform_Analysis(fp,work_name, job_folder, batch = False, pamset=None, debug
                 errorbars = bool(int(settings['errorbars']))
             except:
                 print("Bad format")
-        if('Cell_mask' in keys and AOI_mode=="Cell_mask"):
-            try:
-                
-                cell_mask_fp=job_folder + "/" + settings['Cell_mask']
+        if(AOI_mode=="Cell_mask"):
+            try:                
+                cell_mask_fp=job_folder + "/" + settings['Cell_mask_fp']
                 print(f"Cell_mask_fp: {cell_mask_fp}")
             except:
                 print("Cell map fp badly formatted")
@@ -235,10 +234,9 @@ def perform_Analysis(fp,work_name, job_folder, batch = False, pamset=None, debug
             #Analyse everything
             if(end_point == -1):
                 end_point = len(tif)-4
-            print(f"Analysing time points: {start_point}:{end_point}")
-            #Analyse everything           
-            tif = tif[4+(start_point*2):6+(end_point*2)]
-            print(4+(start_point*2))
+            print(f"Analysing slices: {4+(start_point*2)}:{4+(end_point*2)}")
+            #Assume first are Black/NIR/Start images.     
+            tif = tif[4+(start_point*2):4+(end_point*2)]
         else:
             tif = tif[0:2]
         tif_tags = {}
@@ -273,8 +271,8 @@ def perform_Analysis(fp,work_name, job_folder, batch = False, pamset=None, debug
             yields = make_Yield_Images(yields)
         else:
             yields = make_Yield_Images(tif)
-        if(Debug):
-            cv2.imshow("First yield image", np.asarray(yields[0]*255,dtype=np.uint8))
+        if(DEBUG):
+            cv2.imshow("First yield image", np.asarray(yields[0],dtype=np.uint8))
         yields_for_img = (yields*255).astype(dtype = np.uint8)
         tifffile.imwrite(f'{output_folder}/' + f"Yields_{work_name}_{fn}.tif",data = yields_for_img)
         mask = 0
@@ -283,15 +281,19 @@ def perform_Analysis(fp,work_name, job_folder, batch = False, pamset=None, debug
         elif("Ft_Masks" in AOI_mode):
             mask = create_Masks_Ft([frame[border:imgheight-border,border*2:imgwidth-border*2]for frame in tif],threshold)
         elif("Cell_mask" in AOI_mode):
-            print(f"Reading: {cell_mask_fp} as cell mask image")
-            mask = tifffile.imread(cell_mask_fp,)
-        disp_mask = np.asarray(mask,dtype=np.uint8)
-        if(Debug):
-            cv2.imshow("Mask",disp_mask)
-        cnts,hrs = cv2.findContours(np.asarray(mask.astype(np.uint8)),cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
+            #print(f"Reading: {cell_mask_fp} as cell mask image")
+            cell_mask = tifffile.imread(cell_mask_fp,)
+            #mask = create_enchancement_mask(cell_mask,tif[1],threshold)
+            mask = cell_mask
+            #masked_stack = np.multiply([frame[border:imgheight-border,border*2:imgwidth-border*2]for frame in tif],cell_mask[border:imgheight-border,border*2:imgwidth-border*2])
+            #mask = create_Masks_Ft(masked_stack,0.05)
+        mask = mask.astype(dtype=np.uint8)
+        if(DEBUG):
+            cv2.imshow("Mask",mask)
+        cnts,hrs = cv2.findContours(mask,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
         contimg = cv2.cvtColor(np.zeros_like(mask),cv2.COLOR_GRAY2BGR)
         drawn = cv2.drawContours(contimg,cnts,-1,(0,0,255),-1)
-        if(Debug):
+        if(DEBUG):
             cv2.imshow("Conts",drawn)
         print(f"Raw contours found: {len(cnts)}")
         #Remove all contours below a given size
@@ -308,11 +310,10 @@ def perform_Analysis(fp,work_name, job_folder, batch = False, pamset=None, debug
                     size_filt_cnts.append(cnt)
         print(f"Contours remaining filtering with size thresholds: {minsize}-{maxsize} pixels are {len(size_filt_cnts)}")
         #Draw a filtered mask
-        #filteredMask = cv2.drawContours(cv2.cvtColor(np.zeros_like(mask,dtype=np.uint8),cv2.COLOR_GRAY2BGR),size_filt_cnts,-1,(255,255,255),-1)
         filteredMask = cv2.drawContours(cv2.cvtColor(np.zeros_like(mask,dtype=np.uint8),cv2.COLOR_GRAY2BGR),size_filt_cnts,-1,(255,255,255),-1)
         cell_mask_out = cv2.cvtColor(filteredMask,cv2.COLOR_BGR2GRAY)
         cv2.imwrite(f'{output_folder}/' + work_name + '_' + fn + "cell_mask.tif", cell_mask_out)
-        if(Debug):
+        if(DEBUG):
             cv2.imshow("Filtered conts",filteredMask)  
         #Output table
         meanYields = np.zeros(shape=(len(size_filt_cnts),len(yields)+3))
@@ -338,6 +339,7 @@ def perform_Analysis(fp,work_name, job_folder, batch = False, pamset=None, debug
                         meanYield = np.nanmean(np.where(img!=0,img,np.nan))  
                     except Warning:
                         if(cellidx not in zeroedidx):
+                            cv2.imshow("Cell_Mini",np.asarray(img*255,np.uint8))
                             print(f"Nan/Zero yield enc. Timeindex: {timeidx+start_point}. Cellindex: {cellidx}. Setting zero")
                             zeroedidx.append(cellidx)
                         meanYield = 0
@@ -623,20 +625,44 @@ def make_Yield_Images(img_stack):
     #Yield is defined as Fv/Fm or (Fm-Fo)/Fm
     Yield = []
     for i in range(len(Fo)):
-        Mask = np.where(Fo[i] > 6,1,0)
-        #Emulate remove outliers from imageJ (Which is just a median filter)
-        Mask = Mask.astype(np.uint8)        
-        Mask = cv2.medianBlur(Mask,3)
-        Mask = np.where(Mask>0,1,0)
-        Fv = np.subtract(Fm[i],Fo[i],dtype = np.float32)
+        Mask = np.where(Fm[i] > int(0.05*256),1,0)
+        #Mask = Mask.astype(np.uint8)        
+        #Mask = cv2.medianBlur(Mask,3)
+        #Mask = np.where(Mask>0,1,0)
+        #ipdb.set_trace()
+        Fv = np.subtract(Fm[i],Fo[i],dtype = np.int8)
         #Floor to zero
-        Fv = np.clip(Fv,0,255)*Mask
+        Fv = np.multiply(np.clip(Fv,0,255),Mask)
+        #ipdb.set_trace()
         #cYield = np.divide(Fv,Fm[i],out=np.zeros_like(Fv),where=Fm[i]!=0)
-        cYield = np.divide(Fv,Fm[i],out=np.zeros_like(Fv),where=Fm[i]!=0)
+        cYield = np.divide(Fv.astype(np.float16),Fm[i].astype(np.float16),out=np.zeros_like(Fv, dtype=np.float16),where=Fm[i]!=0)
         Yield.append(cYield)
     return np.asarray(Yield)
     
-def create_Masks(imgstack, maskthres = 0.04):
+def create_enchancement_mask(mask,FM,threshold):
+    """
+    Applies enchancement mask based on 10.1.1.6 of ImagingPAM manual. To be used in conjunction with
+    cell_mask AOI mode. Only valid if dark-adapted before so that FM truly gives Fm values. 
+    Fv/Fm = 0 if Fm < 0.048 in that pixel.
+
+    Parameters
+    ----------
+    imgstack : TYPE
+        DESCRIPTION.
+
+    Returns
+    -------
+    None.
+
+    """
+    E_mask = np.where(FM>int(threshold*255),1,0)
+    res = np.multiply(mask,E_mask)
+    res[res>0]=1
+    res = res.astype(np.uint8)
+    return res
+    
+
+def create_Masks(imgstack, maskthres = 0.048):
     """
     Creates masks based on z-projection of yield values and a thresholding operation
 
@@ -655,7 +681,7 @@ def create_Masks(imgstack, maskthres = 0.04):
     #intensity over the entire stack, i.e. the length of the stack.
     #summed = (summed*255)/imgstack.shape[0]
     summed = (summed)/imgstack.shape[0]
-    threshold = maskthres
+    threshold = maskthres*255
     #Simple threshold
     summed[summed < threshold] = 0
     #summed = cv2.medianBlur(summed,3)    
@@ -757,6 +783,8 @@ if __name__ == '__main__':
         #print(pam_path)
     else:
         pam_path = job_folder + "/PAMset.txt"
+    if("/DEBUG" in args):
+        DEBUG = True
     data = perform_Analysis(fp,job_name, job_folder, batch = batch_flag, pamset = pam_path)
     
 def cleanup():

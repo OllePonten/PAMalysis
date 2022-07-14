@@ -65,4 +65,29 @@ def create_ICF(images, kernel, index = 1, only_Fo=True):
     matplotlib.pyplot.imshow(smoothed_img)
     matplotlib.pyplot.title(f"{index},{kernel}")
 
+def create_Cell_Mask(imgFP, imgType = 0):
+    import tifffile, cv2
+    import numpy as np
+    """
+    Transforms images with contours into a filled cell mask image 
+
+    Parameters
+    ----------
+    imgFP : string
+        Filepath to image to be converted to cell mask.
+        
+    imgType : int
+        Type of input image
+        0 = 8-bit
+        1 = RGB
+
+    Returns
+    -------
+    None.
+
+    """
+    inp_img = tifffile.imread(imgFP)
+    cnts,hrs = cv2.findContours(np.asarray(inp_img.astype(np.uint8)),cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
+    drawn = cv2.drawContours(np.asarray(np.zeros(640,480),dtype=np.uint8),cnts,-1,(0,0,255),-1)
+    
         
