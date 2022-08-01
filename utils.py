@@ -28,13 +28,12 @@ def create_stitched_image(fp, borderx,bordery,timeframe):
     i=0
     j=0
     vconcat=[]
-    #cv2.imshow("Durr",np.asarray(imgs[0],np.uint8))
     seq=[imgs[0:4],imgs[4:8:]]
     patch_list=[]
     while j<2:
         patch_list.append([])
         while i<4:
-            patch_list[j].append(seq[j][i][50:-50:,:])
+            patch_list[j].append(seq[j][i][borderx:-borderx:,bordery:-bordery])
             #cv2.imshow(f"patch img{j}", seq[j][i])
             i+=1
         i=0

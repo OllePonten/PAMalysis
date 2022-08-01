@@ -690,7 +690,7 @@ def create_Masks(imgstack, maskthres = 0.048):
     summed = summed.astype(np.uint8)
     return summed    
 
-def create_Masks_Ft(imgstack,maskthres=0.05):
+def create_Masks_Ft(imgstack,maskthres=0.04):
     """
     Creates masks based on method from yield macro. Based on Ft values
 
@@ -727,11 +727,9 @@ if __name__ == '__main__':
     pam_path=None
     args = sys.argv[1:]
     #All paths are relative to this
-    job_folder = str(pathlib.Path().absolute())   
+    #job_folder = str(pathlib.Path().absolute())   
+    job_folder = os.getcwd()
     print("Args:" + str(args))
-    if(len(args)==0):
-        print("Arguments is empty, exiting.")
-        sys.exit(1)
     if("/help" in args or "/h" in args or len(args)== 0):
         print("This is the PAMalysis software which computes quantum yields of tiffstacks output"
               + " from ImagingWinGigE v2.51d.\n")
@@ -740,9 +738,10 @@ if __name__ == '__main__':
         print("[/dir /d ] followed by DIRECTORY. string argument specificying relative path.\n ")
         print("[/file /f] Only useable if batch mode is not on. Analyses a single stack. \n")
         print("[/job /j] Sets the output folder name. \n")
+        print("[/pamset /p] Sets filename for pamset file \n")
         print("Made by Olle Pontén, Uppsala University, 2021")
         input("Press key to exit")
-        sys.exit()
+        sys.exit(1)
     if ("/Batch" in args or "/batch" in args or "/b" in args):
         batch_flag = True
         if("/dir" in args or "/d" in args):
@@ -779,10 +778,10 @@ if __name__ == '__main__':
         job_name = args[jindex]
     
     if("/p" in args):
-        pam_path = job_folder + "/" + str(args[args.index("/p")+1])
+        pam_path = fp + "/" + str(args[args.index("/p")+1])
         #print(pam_path)
     else:
-        pam_path = job_folder + "/PAMset.txt"
+        pam_path = fp + "/PAMset.txt"
     if("/DEBUG" in args):
         DEBUG = True
     data = perform_Analysis(fp,job_name, job_folder, batch = batch_flag, pamset = pam_path)
