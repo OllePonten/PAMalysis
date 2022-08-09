@@ -690,7 +690,7 @@ def create_Masks(imgstack, maskthres = 0.048):
     summed = summed.astype(np.uint8)
     return summed    
 
-def create_Masks_Ft(imgstack,maskthres=0.04):
+def create_Masks_Ft(imgstack,maskthres=0.03):
     """
     Creates masks based on method from yield macro. Based on Ft values
 
@@ -699,7 +699,7 @@ def create_Masks_Ft(imgstack,maskthres=0.04):
     imgstack : TYPE
         DESCRIPTION.
     maskthres : TYPE, optional
-        DESCRIPTION. The default is 10.
+        DESCRIPTION. The default is 0.03.
 
     Returns
     -------
