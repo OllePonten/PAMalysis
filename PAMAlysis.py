@@ -759,7 +759,7 @@ if __name__ == '__main__':
             fp = job_folder
     elif("/file" in args or "/f" in args):
         try:
-            findex = args.index("/file") + 1
+l            findex = args.index("/file") + 1
         except ValueError:
             try:
                 findex = args.index("/f") + 1     
@@ -791,4 +791,18 @@ def cleanup():
     import matplotlib.pyplot as plt
     cv2.destroyAllWindows()
     plt.close('all')
+    
+
+import argparse
+
+parser = argparse.ArgumentParser(description ="PAMalysis: A python analysis script for analysing Microscopy PAM tif images")
+parser.add_argument('--b', action=argparse.BooleanOptionalAction
+
+
+
+
+
+
+
+
     
