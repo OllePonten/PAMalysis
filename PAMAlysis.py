@@ -15,9 +15,10 @@ import csv
 import pathlib
 import warnings
 import ipdb
+import argparse
 
 #CALL SIG:
-#runfile('C:/Users/ollpo511/Documents/GitHub/PAMalysis/PAMAlysis.py', wdir='C:Users/ollpo511/Documents', args = '/b /dir __DIR__ /j __JOBNAME__')
+#runfile('C:/Users/ollpo511/Documents/GitHub/PAMalysis/PAMAlysis.py', wdir='C:Users/ollpo511/Documents', args = '{Project_Name} {PAMSet filename}')
 
 
 global filenames, DEBUG
@@ -718,90 +719,31 @@ def create_Masks_Ft(imgstack,maskthres=0.03):
     mask = mask.astype(np.uint8)
     return mask
     
-global data
-if __name__ == '__main__':
-    global data
-    batch_flag = False
-    fp = ""
-    job_name = ""
-    pam_path=None
-    args = sys.argv[1:]
-    #All paths are relative to this
-    #job_folder = str(pathlib.Path().absolute())   
-    job_folder = os.getcwd()
-    print("Args:" + str(args))
-    if("/help" in args or "/h" in args or len(args)== 0):
-        print("This is the PAMalysis software which computes quantum yields of tiffstacks output"
-              + " from ImagingWinGigE v2.51d.\n")
-        print("Following options are available:\n")
-        print("[/batch /b] Sets the analysis to be in batch mode(analyses all files in a directory). Directory can then be provided with directory flag argument, or if missing analysis is taken at wdir.")
-        print("[/dir /d ] followed by DIRECTORY. string argument specificying relative path.\n ")
-        print("[/file /f] Only useable if batch mode is not on. Analyses a single stack. \n")
-        print("[/job /j] Sets the output folder name. \n")
-        print("[/pamset /p] Sets filename for pamset file \n")
-        print("Made by Olle Pontén, Uppsala University, 2021")
-        input("Press key to exit")
-        sys.exit(1)
-    if ("/Batch" in args or "/batch" in args or "/b" in args):
-        batch_flag = True
-        if("/dir" in args or "/d" in args):
-            try:
-                findex = args.index("/dir") + 1
-            except ValueError:
-                try:
-                    findex = args.index("/d") + 1     
-                except:
-                    input("No directory flag found. Enter key to exit")
-                    sys.exit(1)
-            fp = args[findex]
-        else:
-            #Assume we are just grabbing all tif stacks in current folder
-            fp = job_folder
-    elif("/file" in args or "/f" in args):
-        try:
-l            findex = args.index("/file") + 1
-        except ValueError:
-            try:
-                findex = args.index("/f") + 1     
-            except:
-                input("No filename flag found. Enter key to exit")
-                sys.exit(1)
-        fp = args[findex]
-    try:
-        jindex = args.index("/job") + 1
-    except ValueError:
-        try:
-            jindex = args.index("/j") + 1
-        except:
-            input("No jobname found. Enter key to exit")
-            sys.exit(1)
-        job_name = args[jindex]
-    
-    if("/p" in args):
-        pam_path = fp + "/" + str(args[args.index("/p")+1])
-        #print(pam_path)
-    else:
-        pam_path = fp + "/PAMset.txt"
-    if("/DEBUG" in args):
-        DEBUG = True
-    data = perform_Analysis(fp,job_name, job_folder, batch = batch_flag, pamset = pam_path)
-    
+
 def cleanup():
     import cv2
     import matplotlib.pyplot as plt
     cv2.destroyAllWindows()
     plt.close('all')
-    
 
-import argparse
+global outputdata
+parser = argparse.ArgumentParser(description ="PAMalysis: A Python analysis script for analysing Microscopy-IPAM tif images. Made by Olle Pontén, Uppsala University 2021. GPL license v3.")
+parser.add_argument('ProjectName',type=str, help="Project/output name")
+parser.add_argument('-PAMSet','--PS',dest='PAMSet',type=str,default="PAMset.txt", help="Path/Name of PAMset file")
+parser.add_argument('-FilePath','--FP', dest='proj_fp',help="Name of data file or data folder(if batch mode enabled). If batch mode is on and this argument is empty PAMalysis will analyse current folder.")
+parser.add_argument('-b','--batch', dest='batch_flag', action='store_true', help="Enable batch mode")
+parser.add_argument('-Debug',action='store_true', help="Switches on verbose output and debug code.")
 
-parser = argparse.ArgumentParser(description ="PAMalysis: A python analysis script for analysing Microscopy PAM tif images")
-parser.add_argument('--b', action=argparse.BooleanOptionalAction
-
-
-
-
-
+args = parser.parse_args()
+cur_dir = os.getcwd()
+if(args.proj_fp is None):
+    if(args.batch_flag):
+        outputdata = perform_Analysis(cur_dir,args.ProjectName,cur_dir,args.batch_flag,args.PAMSet)
+    else:
+        print("Specify file path to analyze if batch mode not enabled. Exiting")
+        sys.exit()
+else:
+    outputdata = perform_Analysis(args.proj_fp,args.ProjectName,cur_dir,args.batch_flag,args.PAMSet)
 
 
 
