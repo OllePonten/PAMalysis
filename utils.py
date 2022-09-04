@@ -89,4 +89,4 @@ def create_Cell_Mask(imgFP, imgType = 0):
     cnts,hrs = cv2.findContours(np.asarray(inp_img.astype(np.uint8)),cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
     drawn = cv2.drawContours(np.asarray(np.zeros(640,480),dtype=np.uint8),cnts,-1,(0,0,255),-1)
     
-        
+            
