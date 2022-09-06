@@ -282,12 +282,9 @@ def perform_Analysis(fp,work_name, job_folder, batch = False, pamset=None):
         elif("Ft_Masks" in AOI_mode):
             mask = create_Masks_Ft([frame[border:imgheight-border,border*2:imgwidth-border*2]for frame in tif],threshold)
         elif("Cell_mask" in AOI_mode):
-            #print(f"Reading: {cell_mask_fp} as cell mask image")
+            print(f"Reading: {cell_mask_fp} as cell mask image")
             cell_mask = tifffile.imread(cell_mask_fp,)
-            #mask = create_enchancement_mask(cell_mask,tif[1],threshold)
             mask = cell_mask
-            #masked_stack = np.multiply([frame[border:imgheight-border,border*2:imgwidth-border*2]for frame in tif],cell_mask[border:imgheight-border,border*2:imgwidth-border*2])
-            #mask = create_Masks_Ft(masked_stack,0.05)
         mask = mask.astype(dtype=np.uint8)
         if(DEBUG):
             cv2.imshow("Mask",mask)
@@ -356,14 +353,14 @@ def perform_Analysis(fp,work_name, job_folder, batch = False, pamset=None):
         if(len(filteredYields)==0):
             print("No yields remaining. Ending analysis of current file")
             continue
-        cv2.imshow("Numbered masks",numberedMask)
+        if(DEBUG):
+            cv2.imshow("Numbered masks",numberedMask)
         cv2.imwrite(f'{output_folder}/' + work_name + '_' + fn + "numbered_masks.tif", numberedMask) 
         subs, names,sortedYields = subdivide_Yield(filteredYields, method = sorting_meth, threshold_size = subpopthreshold_size, disc_pos = sorting_pos,floor = subpopfloor)
         with open(f'{output_folder}/' + work_name+'AllYields.csv', mode = 'a', newline="") as tot_file:
             tot_yield_writer = csv.writer(tot_file, delimiter = ",",quotechar = '"', quoting = csv.QUOTE_MINIMAL)
-            times = [0,0,0] + list(range(0,len(filteredYields[0]-3)*(intervall),intervall))
+            times = ["Index","XPosition","YPosition"] + list(range(0,len(filteredYields[0]-3)*(intervall),intervall))
             if(isinstance(settings,dict) and fovidx==0):
-                tot_yield_writer.writerow('Index, XPosition, YPosition')
                 tot_yield_writer.writerow(settings.items() )
                 tot_yield_writer.writerow(times)
             with open(f'{output_folder}/' + work_name +'_'+ fn + '.csv', mode = 'w',newline="") as pos_file:
@@ -453,7 +450,7 @@ def plot_Values(yields, names, jobname, filename, subjob, intervall = 5, rows = 
         # add every single subplot to the figure with a for loop
         ax = fig.add_subplot(rows,columns,Position[k])
         ax.set_title(names[k])
-        ax.set_ylabel("Fv/Fm")
+        ax.set_ylabel("$F_{V}$/$F_{M}$")
         ax.set_xlabel("Minutes")
         ax.set_ylim(ylim)
         ax.set_xlim(xlim)
@@ -476,7 +473,7 @@ def plot_Values(yields, names, jobname, filename, subjob, intervall = 5, rows = 
     fig.savefig(fname =f"{output_dir}/{jobname}_{subjob}_total_yields")
     #plt.close(f"{jobname}: Average_Yield")
     fig2 = plt.figure(f"{jobname}: Average_Yield")
-    fig2.suptitle(f"{jobname}: Average Fv/Fm")       
+    fig2.suptitle(f"{jobname}: Average "+"$F_{V}$/$F_{M}$")       
     avg_of_all = np.mean(avg_line,axis=0)       
     for idx, avgs in enumerate(avg_lines):
         if(legends and errorbars):
@@ -488,7 +485,7 @@ def plot_Values(yields, names, jobname, filename, subjob, intervall = 5, rows = 
             #plt.errorbar(range(xlim[0],xlim[1],intervall),avgs, markersize = 3, marker='o',linewidth = 2, capsize = 2, elinewidth = 1, errorevery =(1,3),color="black")
         #plt.plot(range(xlim[0],xlim[1],intervall),avgs, label=f"Sample size: {avg_sizes[idx]}", linewidth = 3, linestyle = 'dashed')
         
-        plt.ylabel("Fv/Fm")
+        plt.ylabel("$F_{V}$/$F_{M}$")
         plt.xlabel("Minutes")
         plt.xlim(xlim)
         plt.ylim(ylim)
@@ -498,22 +495,27 @@ def plot_Values(yields, names, jobname, filename, subjob, intervall = 5, rows = 
         plt.grid(axis="y")
     
     plt.plot(avg_of_all,linewidth=4,color="black")
-    fig2.legend(bbox_to_anchor=(0.95,0.85), ncol = 2)
+    
+    # Shrink current axis's height by 10% on the bottom
+    #box = fig2.get_position()
+    #ax2.set_position([box.x0, box.y0 + box.height * 0.1,
+    #             box.width, box.height * 0.9])
+    lgd = fig2.legend(bbox_to_anchor=(1,0), ncol = 2)
+    fig2.savefig(f"{output_dir}/{jobname}_Average_Yields", bbox_extra_artists=(lgd,), bbox_inches='tight')
     #fig2.legend(loc="upper left", ncol = 2)
-    fig2.tight_layout()
-    fig2.savefig(fname = f"{output_dir}/{jobname}_Average_Yields")
+    #fig2.tight_layout()
 
 def plot_hists(yields,jobname, floor=0.2,time_point=0, i_color = "red"):
     print(f"Creating histograms for {jobname}")
     output_dir = f"Output/{jobname}"
     col_fig = plt.figure(f"{jobname}")
-    plt.xlabel("Fv/Fm")
+    plt.xlabel("$F_{V}$/$F_{M}$")
     plt.ylabel("Count")
     yield_bins=np.linspace(floor,0.8,num=(round((0.8-floor)/0.05)+1))
     below = len([i for i in yields if i <= floor])
     yields = yields[(yields>=floor)]
     arr = plt.hist(yields, bins=yield_bins, alpha=0.7, label = f"n: {len(yields)}. <= {floor}: {below}. T: {time_point} mins", color = i_color, edgecolor="black")
-    col_fig.suptitle(f"{jobname}: Histogram of Fv/Fm.")   
+    col_fig.suptitle(f"{jobname}: Histogram of "+"$F_{V}$/$F_{M}$.")   
     plt.xticks(yield_bins)
     avg=np.mean(yields)
     roof = round(max(arr[0])/100+1,0)*100
@@ -556,8 +558,9 @@ def filter_Yields(cellyields, meths):
                           remidxs.add(idx)
                   else:
                     remidxs.add(idx)
-    outputmsg += f"Filtered: {len(remidxs)} based on threshold: {sydthres}. {list(remidxs)}"
-    print(outputmsg)
+    if(len(list(remidxs))>0):
+        outputmsg += f"Filtered: {len(remidxs)} based on an sudden decrease of more than: {sydthres}. {list(remidxs)}"
+        print(outputmsg)
     return np.delete(cellyields,list(remidxs),axis=0)
               
 def subdivide_Yield(cellyields, method = "Static Bins",floor = 0, threshold_size = 0.25, disc_pos = 1):
