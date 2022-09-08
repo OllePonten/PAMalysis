@@ -385,7 +385,7 @@ def perform_Analysis(fp,work_name, job_folder, batch = False, pamset=None):
                 unsorted_yields_end = np.concatenate((unsorted_yields_end, x[:,3+hist_end-start_point]))
         #print(len(list(outYields.values())))
         #unsorted_Yields = np.concatenate((list(outYields.values())),axis=1)       
-        plot_hists(unsorted_yields_start,work_name,subpopfloor,start_point*intervall,"red")
+        plot_hists(unsorted_yields_start,work_name,subpopfloor,start_point*intervall,"blue")
         if(hist_end != -1):
             plot_hists(unsorted_yields_end,work_name,subpopfloor,(hist_end-start_point)*intervall,"green")
             
@@ -473,7 +473,7 @@ def plot_Values(yields, names, jobname, filename, subjob, intervall = 5, rows = 
     fig.savefig(fname =f"{output_dir}/{jobname}_{subjob}_total_yields")
     #plt.close(f"{jobname}: Average_Yield")
     fig2 = plt.figure(f"{jobname}: Average_Yield")
-    fig2.suptitle(f"{jobname}: Average "+"$F_{V}$/$F_{M}$")       
+    fig2.suptitle(f"{jobname}: Average "+"$F_{V}$/$F_{M}$. n(positions) = {len(avg_lines)}")       
     avg_of_all = np.mean(avg_line,axis=0)       
     for idx, avgs in enumerate(avg_lines):
         if(legends and errorbars):
@@ -524,16 +524,16 @@ def plot_hists(yields,jobname, floor=0.2,time_point=0, i_color = "red"):
         roof = plt.ylim()[1]
     plt.ylim(0,roof)
     for i in range(len((yield_bins))-1):
-        if(i_color=="red"):
-            plt.text(arr[1][i]+0.01,arr[0][i]+0.2,str(int(arr[0][i])),color="red")
-            plt.axvline(avg,linestyle='dashed',color="red")
-            plt.text(avg-0.05,roof*1.05,f"Mean: {avg:.3f}",color="red")
+        if(i_color=="blue"):
+            plt.text(arr[1][i]+0.01,arr[0][i]+0.2,str(int(arr[0][i])),color="blue")
+            plt.axvline(avg,linestyle='dashed',color="blue")
+            plt.text(avg-0.05,roof*1.05,f"Mean: {avg:.3f}",color="blue")
         else:
             plt.text(arr[1][i]+0.03,arr[0][i]+0.2,str(int(arr[0][i])),color=i_color)
             plt.axvline(avg,linestyle='dashed',color=i_color)
             plt.text(avg-0.05,roof,f"Mean: {avg:.3f}",color=i_color)
-    plt.legend(loc="best")
-    col_fig.savefig(f"{output_dir}/{jobname}")
+    lgd = col_fig.legend(bbox_to_anchor=(1,0))
+    col_fig.savefig(f"{output_dir}/{jobname}", bbox_inches='tight')
         
 def filter_Yields(cellyields, meths):
     SYD = False
