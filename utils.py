@@ -16,30 +16,47 @@ def read_all_files(fp):
         
     return imgs
 
-def create_stitched_image(fp, borderx,bordery,timeframe):
-    import os, tifffile, cv2, numpy as np
+def create_stitched_image(fp, borderx,bordery,timeframe, cols,rows):
+    import os, tifffile, cv2, numpy as np, ipdb
 
     imgs = []
     fl = os.listdir(fp)
+    col = 0
+    row=0
     tifs = [fp+ "/" + file for file in fl if ".tif" in file]
     for fovidx, i in enumerate(tifs):        
         tif = tifffile.imread(i)
         imgs.append(tif[timeframe])
-    i=0
-    j=0
-    vconcat=[]
-    seq=[imgs[0:4],imgs[4:8:]]
-    patch_list=[]
-    while j<2:
-        patch_list.append([])
-        while i<4:
-            patch_list[j].append(seq[j][i][borderx:-borderx:,bordery:-bordery])
-            #cv2.imshow(f"patch img{j}", seq[j][i])
-            i+=1
-        i=0
-        #print(len(patch_list[0]))
-        vconcat.append(np.vstack(patch_list[j]))
-        j+=1
+        if(row==rows):
+            col+=1
+            row = 0
+        
+    # i=0
+    # j=0
+    # vconcat=[]
+    # patch_list=[]
+    # while j<2:
+    #     patch_list.append([])
+    #     while i<4:
+    #         patch_list[j].append(imgs[j][i][borderx:-borderx:,bordery:-bordery])
+    #         #cv2.imshow(f"patch img{j}", seq[j][i])
+    #         i+=1
+    #     i=0
+    #     #print(len(patch_list[0]))
+    #     vconcat.append(np.vstack(patch_list[j]))
+    #     j+=1
+    npimgs = np.asarray(imgs)
+    vconcat = []
+    for col in range(cols):
+        col_tif = npimgs[col*rows:(col+1)*rows]
+        col_img = []
+        for row in range(rows):
+            col_img.append(col_tif[row][borderx:-borderx:,bordery:-bordery])
+        vconcat.append(np.vstack(col_img))
+        
+    
+    vconcat = np.asarray(vconcat,np.uint8)
+    hconcat = np.hstack(vconcat[:])
     
     vconcat = np.asarray(vconcat,np.uint8)
     #cv2.imshow("V img", vconcat)

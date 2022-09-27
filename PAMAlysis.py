@@ -6,16 +6,16 @@ Software for analysing tiff image stacks created by pacman
 @author: Olle
 """
 import sys
-import numpy as np
-import matplotlib.pyplot as plt
-import cv2
+import datetime
 import tifffile
 import os
 import csv   
-import pathlib
 import warnings
-import ipdb
 import argparse
+
+import numpy as np
+import matplotlib.pyplot as plt
+import cv2
 
 #CALL SIG:
 #runfile('C:/Users/ollpo511/Documents/GitHub/PAMalysis/PAMAlysis.py', wdir='C:Users/ollpo511/Documents', args = '{Project_Name} {PAMSet filename}')
@@ -56,7 +56,7 @@ def perform_Analysis(fp,work_name, job_folder, batch = False, pamset=None):
 
     """
     global DEBUG
-    
+    global PlotAvg
     cv2.destroyAllWindows()
     plt.close('all')
     #### DEFAULT SETTINGS ####
@@ -68,10 +68,11 @@ def perform_Analysis(fp,work_name, job_folder, batch = False, pamset=None):
     maxsize = 60
     subpopthreshold_size = 0.9
     subpopfloor = 0.1
-    threshold = 0.03
+    threshold = 0.04
     create_Hists = False
     create_Plots = True
     globalcoordinates = False
+    hist_start=0
     start_point=0
     legends = True
     errorbars = True
@@ -81,11 +82,11 @@ def perform_Analysis(fp,work_name, job_folder, batch = False, pamset=None):
     cell_mask_fp=""
     sorting_meth = "Static Bins"
     sorting_pos=1
-    minimum_dist = 10
     #########################
     settings = load_PAM_Params(pamset)
     output_folder = ""
     filenames = []
+    PlotAvg = False
     if(len(settings) > 0):
         keys = settings.keys()
         if('minsize' in keys):
@@ -129,7 +130,7 @@ def perform_Analysis(fp,work_name, job_folder, batch = False, pamset=None):
             try:
                 threshold = float(settings['threshold'])
             except:
-                print("Threshold badle formatted")
+                print("Threshold badly formatted")
         if('intervall' in keys):
             try:
                 intervall = int(settings['intervall'])
@@ -157,6 +158,11 @@ def perform_Analysis(fp,work_name, job_folder, batch = False, pamset=None):
             except:
                 print("Hist end point badly formatted")
                 pass
+        if('Hist_start' in keys):
+            try:
+                hist_start = int(settings['Hist_start'])
+            except:
+                print("Hist end point badly formatted")
         if('Plots' in keys):
             try:
                 create_Plots = bool(int(settings['Plots']))
@@ -230,12 +236,12 @@ def perform_Analysis(fp,work_name, job_folder, batch = False, pamset=None):
         except:
             input(f"Could not load image: {fn} Please check filename")
             sys.exit()
-        print(f"Read in file: {current_tif} with {int(len(tif)/2-4)} time points")
+        print(f"Read in file: {current_tif} with {int((len(tif)-6)/2)} time points")
         if(len(tif) > 6):
             #Analyse everything
             if(end_point == -1):
                 end_point = len(tif)-4
-            print(f"Analysing slices: {4+(start_point*2)}:{4+(end_point*2)}")
+            print(f"Analysing slices: {4+start_point*2}:{4+end_point*2}")
             #Assume first are Black/NIR/Start images.     
             tif = tif[4+(start_point*2):4+(end_point*2)]
         else:
@@ -281,6 +287,7 @@ def perform_Analysis(fp,work_name, job_folder, batch = False, pamset=None):
             mask = create_Masks(yields,threshold)  
         elif("Ft_Masks" in AOI_mode):
             mask = create_Masks_Ft([frame[border:imgheight-border,border*2:imgwidth-border*2]for frame in tif],threshold)
+            yields = np.multiply(yields,mask)
         elif("Cell_mask" in AOI_mode):
             print(f"Reading: {cell_mask_fp} as cell mask image")
             cell_mask = tifffile.imread(cell_mask_fp,)
@@ -310,13 +317,15 @@ def perform_Analysis(fp,work_name, job_folder, batch = False, pamset=None):
         #Draw a filtered mask
         filteredMask = cv2.drawContours(cv2.cvtColor(np.zeros_like(mask,dtype=np.uint8),cv2.COLOR_GRAY2BGR),size_filt_cnts,-1,(255,255,255),-1)
         cell_mask_out = cv2.cvtColor(filteredMask,cv2.COLOR_BGR2GRAY)
-        cv2.imwrite(f'{output_folder}/' + work_name + '_' + fn + "cell_mask.tif", cell_mask_out)
+        tifffile.imwrite(f'{output_folder}/' + work_name + '_' + fn + "cell_mask.tif", cell_mask_out)
         if(DEBUG):
             cv2.imshow("Filtered conts",filteredMask)  
         #Output table
         meanYields = np.zeros(shape=(len(size_filt_cnts),len(yields)+3))
         numberedMask = cv2.resize(filteredMask,(filteredMask.shape[1] *2, filteredMask.shape[0] * 2),interpolation = cv2.INTER_CUBIC)
         for cellidx, cnt in enumerate(size_filt_cnts):
+            #ALTERNATE IMPLEMENTATION
+
             #Get minimum bounding rect
             rect = cv2.boundingRect(cnt)
             if(globalcoordinates):
@@ -334,10 +343,12 @@ def perform_Analysis(fp,work_name, job_folder, batch = False, pamset=None):
                         #only over nonnan numbers, giving an accurate average yield
                         #We do this within warnings to catch completely nan-filled areas
                         #(Likely cells who have wandered off)
-                        meanYield = np.nanmean(np.where(img!=0,img,np.nan))  
+                        #We round to 3 digits because the base data is 8-bit. We should not create data where there could be none.
+                        meanYield = round(np.nanmean(np.where(img!=0,img,np.nan)),3)
                     except Warning:
                         if(cellidx not in zeroedidx):
-                            cv2.imshow("Cell_Mini",np.asarray(img*255,np.uint8))
+                            if(DEBUG):
+                                cv2.imshow("Cell_Mini",np.asarray(img*255,np.uint8))
                             print(f"Nan/Zero yield enc. Timeindex: {timeidx+start_point}. Cellindex: {cellidx}. Setting zero")
                             zeroedidx.append(cellidx)
                         meanYield = 0
@@ -346,7 +357,8 @@ def perform_Analysis(fp,work_name, job_folder, batch = False, pamset=None):
                         meanYields[cellidx,0] = (fovidx*1000)+cellidx
                         meanYields[cellidx,1] = cellcenter[0]
                         meanYields[cellidx,2] = cellcenter[1]
-                meanYields[cellidx,timeidx+3] = meanYield      
+                meanYields[cellidx,timeidx+3] = meanYield     
+                meanYields[cellidx,timeidx+3] = round(meanYields[cellidx,timeidx+3],3)
         #THRESHOLD FILTER
         filteredYields = filter_Yields(meanYields[:,:], filterMethods)
         print(f"Yields remaining after filter: {len(filteredYields)}")
@@ -361,7 +373,7 @@ def perform_Analysis(fp,work_name, job_folder, batch = False, pamset=None):
             tot_yield_writer = csv.writer(tot_file, delimiter = ",",quotechar = '"', quoting = csv.QUOTE_MINIMAL)
             times = ["Index","XPosition","YPosition"] + list(range(0,len(filteredYields[0]-3)*(intervall),intervall))
             if(isinstance(settings,dict) and fovidx==0):
-                tot_yield_writer.writerow(settings.items() )
+                tot_yield_writer.writerow(list(settings.items()) + [str(datetime.date.today())])
                 tot_yield_writer.writerow(times)
             with open(f'{output_folder}/' + work_name +'_'+ fn + '.csv', mode = 'w',newline="") as pos_file:
                 yield_writer = csv.writer(pos_file, delimiter = ",",quotechar = '"', quoting = csv.QUOTE_MINIMAL)
@@ -371,7 +383,7 @@ def perform_Analysis(fp,work_name, job_folder, batch = False, pamset=None):
                     yield_writer.writerow(times)
                 for idx,part in enumerate(sortedYields):
                     yield_writer.writerow(part)    
-                    tot_yield_writer.writerow(part)                 
+                    tot_yield_writer.writerow(part)    
         if(create_Plots):
             plot_Values(subs,names, work_name, fn,fovidx, intervall,floor=subpopfloor,legends = legends,errorbars=errorbars)      
         #For outside use, return our filtered yields
@@ -380,15 +392,16 @@ def perform_Analysis(fp,work_name, job_folder, batch = False, pamset=None):
         unsorted_yields_start = []
         unsorted_yields_end = []
         for x in list(outYields.values()):
-            unsorted_yields_start = np.concatenate((unsorted_yields_start, x[:,3+start_point]))
-            if(hist_end != -1):                
-                unsorted_yields_end = np.concatenate((unsorted_yields_end, x[:,3+hist_end-start_point]))
+            unsorted_yields_start = np.concatenate((unsorted_yields_start, x[:,2+hist_start]))
+            if(hist_end != -1):            
+                unsorted_yields_end = np.concatenate((unsorted_yields_end, x[:,2+hist_end-start_point]))
         #print(len(list(outYields.values())))
         #unsorted_Yields = np.concatenate((list(outYields.values())),axis=1)       
-        plot_hists(unsorted_yields_start,work_name,subpopfloor,start_point*intervall,"blue")
+        plot_hists(unsorted_yields_start,work_name,subpopfloor,(hist_start-1)*intervall,"blue")
         if(hist_end != -1):
             plot_hists(unsorted_yields_end,work_name,subpopfloor,(hist_end-start_point)*intervall,"green")
             
+    PlotAvg = False
     return outYields
 
 def reanalyze(yields, indexes):
@@ -399,6 +412,7 @@ def reanalyze(yields, indexes):
 
 def plot_Values(yields, names, jobname, filename, subjob, intervall = 5, rows = -1, columns = -1, mode = "Lines", floor = 0.2,legends=True, errorbars=True):
     #Assumes that yields is formatted as yields.shape = [n(subplots),n(samples),n(values)]
+    global PlotAvg
     rows = -1
     columns = -1
     color = None
@@ -469,19 +483,20 @@ def plot_Values(yields, names, jobname, filename, subjob, intervall = 5, rows = 
         plt.minorticks_on()
         plt.grid(axis="y")
 
-    fig.tight_layout(pad = 3.0)
+    #fig.tight_layout(pad = 3.0)
     fig.savefig(fname =f"{output_dir}/{jobname}_{subjob}_total_yields")
-    #plt.close(f"{jobname}: Average_Yield")
-    fig2 = plt.figure(f"{jobname}: Average_Yield")
-    fig2.suptitle(f"{jobname}: Average "+"$F_{V}$/$F_{M}$. n(positions) = {len(avg_lines)}")       
-    avg_of_all = np.mean(avg_line,axis=0)       
+    
+    
+    fig2 = plt.figure(f"{jobname}: Average_Yield",figsize = [6,5.5])
+    fig2.suptitle(f"{jobname}: Average "+"$F_{V}$/$F_{M}$.")
+    ax = plt.subplot(111)
     for idx, avgs in enumerate(avg_lines):
         if(legends and errorbars):
-            plt.errorbar(range(xlim[0],xlim[1],intervall),avgs, yerr = avg_errors[idx], label=f"{filename[-1],names[idx][3:]}", markersize = 3, marker='o',linewidth = 2, capsize = 2, elinewidth = 1, errorevery =(1,5))
+            ax.errorbar(range(xlim[0],xlim[1],intervall),avgs, yerr = avg_errors[idx], label=f"{filename}, " + f"n(cells): {str().join([s for s in names[idx][3:12] if s.isdigit()])}", markersize = 3, marker='o',linewidth = 2, capsize = 2, elinewidth = 1, errorevery =(1,5))
         elif(errorbars):
-            plt.errorbar(range(xlim[0],xlim[1],intervall),avgs, yerr = avg_errors[idx], markersize = 3, marker='o',linewidth = 2, capsize = 2, elinewidth = 1, errorevery =(1,5))
+            ax.errorbar(range(xlim[0],xlim[1],intervall),avgs, yerr = avg_errors[idx], markersize = 3, marker='o',linewidth = 2, capsize = 2, elinewidth = 1, errorevery =(1,5))
         else:
-            plt.plot(range(xlim[0],xlim[1],intervall),avgs, markersize = 3, marker='o',linewidth = 4, color="black")
+            ax.plot(range(xlim[0],xlim[1],intervall),avgs, markersize = 3, marker='o',linewidth = 4, color="black")
             #plt.errorbar(range(xlim[0],xlim[1],intervall),avgs, markersize = 3, marker='o',linewidth = 2, capsize = 2, elinewidth = 1, errorevery =(1,3),color="black")
         #plt.plot(range(xlim[0],xlim[1],intervall),avgs, label=f"Sample size: {avg_sizes[idx]}", linewidth = 3, linestyle = 'dashed')
         
@@ -492,19 +507,19 @@ def plot_Values(yields, names, jobname, filename, subjob, intervall = 5, rows = 
         plt.yticks(np.arange(ylim[0], ylim[1], step=(ylim[1]-ylim[0])/7), labels=None)
         plt.xticks(np.arange(0,xlim[1],step=xstep))
         plt.minorticks_on()
-        plt.grid(axis="y")
+        plt.grid(True, axis="y")
     
-    plt.plot(avg_of_all,linewidth=4,color="black")
-    
-    # Shrink current axis's height by 10% on the bottom
-    #box = fig2.get_position()
-    #ax2.set_position([box.x0, box.y0 + box.height * 0.1,
-    #             box.width, box.height * 0.9])
-    lgd = fig2.legend(bbox_to_anchor=(1,0), ncol = 2)
+    lgd = fig2.legend(loc = 'upper center', ncol = 2)
+
+    if(not PlotAvg):
+        box = ax.get_position()
+        ax.set_position([box.x0, box.y0, box.width, box.height * 0.9])
+        PlotAvg = True
     fig2.savefig(f"{output_dir}/{jobname}_Average_Yields", bbox_extra_artists=(lgd,), bbox_inches='tight')
     #fig2.legend(loc="upper left", ncol = 2)
     #fig2.tight_layout()
-
+    
+    
 def plot_hists(yields,jobname, floor=0.2,time_point=0, i_color = "red"):
     print(f"Creating histograms for {jobname}")
     output_dir = f"Output/{jobname}"
@@ -527,12 +542,15 @@ def plot_hists(yields,jobname, floor=0.2,time_point=0, i_color = "red"):
         if(i_color=="blue"):
             plt.text(arr[1][i]+0.01,arr[0][i]+0.2,str(int(arr[0][i])),color="blue")
             plt.axvline(avg,linestyle='dashed',color="blue")
-            plt.text(avg-0.05,roof*1.05,f"Mean: {avg:.3f}",color="blue")
+            plt.text(0.1,plt.ylim()[1]*1.03,f"Mean: {avg:.3f}",color="blue")
         else:
             plt.text(arr[1][i]+0.03,arr[0][i]+0.2,str(int(arr[0][i])),color=i_color)
             plt.axvline(avg,linestyle='dashed',color=i_color)
-            plt.text(avg-0.05,roof,f"Mean: {avg:.3f}",color=i_color)
-    lgd = col_fig.legend(bbox_to_anchor=(1,0))
+            plt.text(0.1,plt.ylim()[1],f"Mean: {avg:.3f}",color=i_color)
+    
+
+    if(len(col_fig.axes[0].get_lines())>20):
+        lgd = col_fig.legend(bbox_to_anchor=(0.91,0.89))
     col_fig.savefig(f"{output_dir}/{jobname}", bbox_inches='tight')
         
 def filter_Yields(cellyields, meths):
@@ -629,17 +647,20 @@ def make_Yield_Images(img_stack):
     #Yield is defined as Fv/Fm or (Fm-Fo)/Fm
     Yield = []
     for i in range(len(Fo)):
-        Mask = np.where(Fm[i] > int(0.05*256),1,0)
-        #Mask = Mask.astype(np.uint8)        
-        #Mask = cv2.medianBlur(Mask,3)
-        #Mask = np.where(Mask>0,1,0)
+        #Remove s&p noise
+        Mask = np.where(Fm[i] > int(0.04*255),1,0)
+        Mask = Mask.astype(np.uint8)        
+        Mask = cv2.medianBlur(Mask,3)
+        Mask = np.where(Mask>0,1,0)
         #ipdb.set_trace()
         Fv = np.subtract(Fm[i],Fo[i],dtype = np.int8)
         #Floor to zero
         Fv = np.multiply(np.clip(Fv,0,255),Mask)
+        #Fv = np.clip(Fv,0,255)
         #ipdb.set_trace()
         #cYield = np.divide(Fv,Fm[i],out=np.zeros_like(Fv),where=Fm[i]!=0)
         cYield = np.divide(Fv.astype(np.float16),Fm[i].astype(np.float16),out=np.zeros_like(Fv, dtype=np.float16),where=Fm[i]!=0)
+        cYield = np.round(cYield,decimals=3)
         Yield.append(cYield)
     return np.asarray(Yield)
     
@@ -686,33 +707,32 @@ def create_Masks(imgstack, maskthres = 0.048):
     #summed = (summed*255)/imgstack.shape[0]
     summed = (summed)/imgstack.shape[0]
     threshold = maskthres*255
-    #Simple threshold
     summed[summed < threshold] = 0
-    #summed = cv2.medianBlur(summed,3)    
+    
     #np.clip(summed,0,255,out=summed)
     summed[summed > 0] = 1
     summed = summed.astype(np.uint8)
     return summed    
 
-def create_Masks_Ft(imgstack,maskthres=0.03):
+def create_Masks_Ft(imgstack,maskthres=0.048):
     """
-    Creates masks based on method from yield macro. Based on Ft values
+    Creates masks. Based on Ft values
 
     Parameters
     ----------
-    imgstack : TYPE
-        DESCRIPTION.
-    maskthres : TYPE, optional
-        DESCRIPTION. The default is 0.03.
+    imgstack : numpy array
+        should be a MxNxP stack of yield images.
+    maskthres : float, optional
+        DESCRIPTION. The default is 0.048.
 
     Returns
     -------
-    None.
+    Mask.
 
     """
     Fo = imgstack[::2]
     th = []
-    threshold = maskthres*255
+    threshold = maskthres*256
     for i in range(len(Fo)):
         src = np.array(Fo[i])
         ret,img=cv2.threshold(src,int(threshold),1, cv2.THRESH_BINARY)
