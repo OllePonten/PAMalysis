@@ -12,6 +12,8 @@ import os
 import csv   
 import warnings
 import argparse
+import pprint
+import random
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -68,11 +70,11 @@ def perform_Analysis(fp,work_name, job_folder, batch = False, pamset=None):
     maxsize = 60
     subpopthreshold_size = 0.9
     subpopfloor = 0.1
-    threshold = 0.04
+    threshold = 0.048
     create_Hists = False
     create_Plots = True
     globalcoordinates = False
-    hist_start=0
+    hist_start=1
     start_point=0
     legends = True
     errorbars = True
@@ -80,13 +82,14 @@ def perform_Analysis(fp,work_name, job_folder, batch = False, pamset=None):
     hist_end=-1
     filterMethods = {"SYD":0.3}
     cell_mask_fp=""
-    sorting_meth = "Static Bins"
+    sorting_meth = "Static_Bins"
     sorting_pos=1
     #########################
     settings = load_PAM_Params(pamset)
     output_folder = ""
     filenames = []
     PlotAvg = False
+    cell_limit=2000
     if(len(settings) > 0):
         keys = settings.keys()
         if('minsize' in keys):
@@ -205,7 +208,12 @@ def perform_Analysis(fp,work_name, job_folder, batch = False, pamset=None):
                 globalcoordinates=bool(int(settings['global_coordinates']))
             except:
                 print("Global coordinates badly formatted")
-        print(settings)
+        if('Max_Cells' in keys):
+            try:
+                cell_limit=int(settings['Max_Cells'])
+            except:
+                print("Max cells badly formatted")
+        pprint.pprint(settings)
     outYields = dict()
     if(batch):      
         fl = os.listdir(fp)
@@ -311,7 +319,9 @@ def perform_Analysis(fp,work_name, job_folder, batch = False, pamset=None):
                 maxX = imgwidth-border*2
                 minX = border*2
                 minY = border
-                if(x+border*2 > minX and x+w+border*2 < maxX and y+border > minY and y+h+border < maxY):         
+                if(x+border*2 > minX and x+w+border*2 < maxX and y+border > minY and y+h+border < maxY):  
+                    if(len(size_filt_cnts) >= cell_limit):
+                        size_filt_cnts.pop(random.randint(0,len(size_filt_cnts)-1))
                     size_filt_cnts.append(cnt)
         print(f"Contours remaining filtering with size thresholds: {minsize}-{maxsize} pixels are {len(size_filt_cnts)}")
         #Draw a filtered mask
@@ -464,7 +474,7 @@ def plot_Values(yields, names, jobname, filename, subjob, intervall = 5, rows = 
         # add every single subplot to the figure with a for loop
         ax = fig.add_subplot(rows,columns,Position[k])
         ax.set_title(names[k])
-        ax.set_ylabel("$F_{V}$/$F_{M}$")
+        ax.set_ylabel("$F_{V}$/$F_{m}$")
         ax.set_xlabel("Minutes")
         ax.set_ylim(ylim)
         ax.set_xlim(xlim)
@@ -488,7 +498,7 @@ def plot_Values(yields, names, jobname, filename, subjob, intervall = 5, rows = 
     
     
     fig2 = plt.figure(f"{jobname}: Average_Yield",figsize = [6,5.5])
-    fig2.suptitle(f"{jobname}: Average "+"$F_{V}$/$F_{M}$.")
+    fig2.suptitle(f"{jobname}: Average "+"$F_{V}$/$F_{m}$.")
     ax = plt.subplot(111)
     for idx, avgs in enumerate(avg_lines):
         if(legends and errorbars):
@@ -500,7 +510,7 @@ def plot_Values(yields, names, jobname, filename, subjob, intervall = 5, rows = 
             #plt.errorbar(range(xlim[0],xlim[1],intervall),avgs, markersize = 3, marker='o',linewidth = 2, capsize = 2, elinewidth = 1, errorevery =(1,3),color="black")
         #plt.plot(range(xlim[0],xlim[1],intervall),avgs, label=f"Sample size: {avg_sizes[idx]}", linewidth = 3, linestyle = 'dashed')
         
-        plt.ylabel("$F_{V}$/$F_{M}$")
+        plt.ylabel("$F_{V}$/$F_{m}$")
         plt.xlabel("Minutes")
         plt.xlim(xlim)
         plt.ylim(ylim)
@@ -524,15 +534,16 @@ def plot_hists(yields,jobname, floor=0.2,time_point=0, i_color = "red"):
     print(f"Creating histograms for {jobname}")
     output_dir = f"Output/{jobname}"
     col_fig = plt.figure(f"{jobname}")
-    plt.xlabel("$F_{V}$/$F_{M}$")
+    plt.xlabel("$F_{V}$/$F_{m}$")
     plt.ylabel("Count")
     yield_bins=np.linspace(floor,0.8,num=(round((0.8-floor)/0.05)+1))
     below = len([i for i in yields if i <= floor])
     yields = yields[(yields>=floor)]
-    arr = plt.hist(yields, bins=yield_bins, alpha=0.7, label = f"n: {len(yields)}. <= {floor}: {below}. T: {time_point} mins", color = i_color, edgecolor="black")
-    col_fig.suptitle(f"{jobname}: Histogram of "+"$F_{V}$/$F_{M}$.")   
-    plt.xticks(yield_bins)
     avg=np.mean(yields)
+    arr = plt.hist(yields, bins=yield_bins, alpha=0.7, label = f"n: {len(yields)}. {below} <= {floor}. T: {time_point} mins. Mean: {avg:.3f}", color = i_color, edgecolor="black")
+    #col_fig.suptitle(f"{jobname}: Histogram of "+"$F_{V}$/$F_{m}$.")   
+    plt.xticks(yield_bins)
+    
     roof = round(max(arr[0])/100+1,0)*100
     #Make sure roof stays the same to keep scaling.
     if(roof < plt.ylim()[1]):
@@ -542,17 +553,54 @@ def plot_hists(yields,jobname, floor=0.2,time_point=0, i_color = "red"):
         if(i_color=="blue"):
             plt.text(arr[1][i]+0.01,arr[0][i]+0.2,str(int(arr[0][i])),color="blue")
             plt.axvline(avg,linestyle='dashed',color="blue")
-            plt.text(0.1,plt.ylim()[1]*1.03,f"Mean: {avg:.3f}",color="blue")
+            #plt.text(max(yield_bins)-0.12,plt.ylim()[1]*1.02,f"Mean: {avg:.3f}",color="blue")
         else:
             plt.text(arr[1][i]+0.03,arr[0][i]+0.2,str(int(arr[0][i])),color=i_color)
             plt.axvline(avg,linestyle='dashed',color=i_color)
-            plt.text(0.1,plt.ylim()[1],f"Mean: {avg:.3f}",color=i_color)
+            #plt.text(max(yield_bins)-0.12,plt.ylim()[1]*0.96,f"Mean: {avg:.3f}",color=i_color)
     
 
     if(len(col_fig.axes[0].get_lines())>20):
-        lgd = col_fig.legend(bbox_to_anchor=(0.91,0.89))
+        lgd = col_fig.legend(bbox_to_anchor=(0.65,1))
     col_fig.savefig(f"{output_dir}/{jobname}", bbox_inches='tight')
         
+def filter_conts(cnts,distance):    
+    """
+    Filters contours so that they are at least distance pixels away from each other  
+
+    Parameters
+    ----------
+    cnts : TYPE
+        DESCRIPTION.
+    distance : TYPE
+        Distance in pixel from edge to edge of minimum enclosing circles.
+
+    Returns
+    -------
+    None.
+
+    """    
+    cps = []
+    radii = []
+    discardlist = []
+    for idx,cnt in enumerate(cnts):
+        (x,y),radius = cv2.minEnclosingCirlce(cnt)
+        cps.append[int(x),int(y)]
+        radii.append(radius)
+    for idx, circle in enumerate(radii):
+        for jdx, compCircle in enumerate(radii):
+            #Check for self-intersection
+            if(cps[jdx] != cps[idx]):
+                cpdist = np.sqrt((cps[idx][0]-cps[idx][1])**2 + (cps[jdx][0]-cps[jdx][1])**2)
+                if (cpdist+radii[idx]+radii[jdx] <= distance):
+                    #Discard
+                    discardlist.append(jdx)
+    for cnt in discardlist:
+        cnts.remove(cnts)
+    return cnts
+
+
+    
 def filter_Yields(cellyields, meths):
     SYD = False
     sydthres = 1
@@ -581,7 +629,7 @@ def filter_Yields(cellyields, meths):
         print(outputmsg)
     return np.delete(cellyields,list(remidxs),axis=0)
               
-def subdivide_Yield(cellyields, method = "Static Bins",floor = 0, threshold_size = 0.25, disc_pos = 1):
+def subdivide_Yield(cellyields, method = "Static_Bins",floor = 0, threshold_size = 0.25, disc_pos = 1):
     #Several modes for finding subpopulations
     #Static Value = Divides up in subpopulations based on the yield value in disc pos 
     #using static bins of threshold_size
@@ -591,7 +639,7 @@ def subdivide_Yield(cellyields, method = "Static Bins",floor = 0, threshold_size
     sortedYields = []  
     names = []
     base=2
-    if(method == "Static Bins"):
+    if(method == "Static_Bins"):
         subs = int((1-floor)/threshold_size)
         #We can't know the sizes of the populations from the start
         subpops = []
@@ -648,7 +696,7 @@ def make_Yield_Images(img_stack):
     Yield = []
     for i in range(len(Fo)):
         #Remove s&p noise
-        Mask = np.where(Fm[i] > int(0.04*255),1,0)
+        Mask = np.where(Fo[i] > int(0.048*255),1,0)
         Mask = Mask.astype(np.uint8)        
         Mask = cv2.medianBlur(Mask,3)
         Mask = np.where(Mask>0,1,0)
@@ -667,7 +715,7 @@ def make_Yield_Images(img_stack):
 def create_enchancement_mask(mask,FM,threshold):
     """
     Applies enchancement mask based on 10.1.1.6 of ImagingPAM manual. To be used in conjunction with
-    cell_mask AOI mode. Only valid if dark-adapted before so that FM truly gives Fm values. 
+    cell_mask AOI mode. Only valid if dark-adapted before so that Fm truly gives Fm values. 
     Fv/Fm = 0 if Fm < 0.048 in that pixel.
 
     Parameters
