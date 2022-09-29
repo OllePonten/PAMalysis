@@ -334,7 +334,6 @@ def perform_Analysis(fp,work_name, job_folder, batch = False, pamset=None):
         meanYields = np.zeros(shape=(len(size_filt_cnts),len(yields)+3))
         numberedMask = cv2.resize(filteredMask,(filteredMask.shape[1] *2, filteredMask.shape[0] * 2),interpolation = cv2.INTER_CUBIC)
         for cellidx, cnt in enumerate(size_filt_cnts):
-            #ALTERNATE IMPLEMENTATION
 
             #Get minimum bounding rect
             rect = cv2.boundingRect(cnt)
@@ -541,9 +540,7 @@ def plot_hists(yields,jobname, floor=0.2,time_point=0, i_color = "red"):
     yields = yields[(yields>=floor)]
     avg=np.mean(yields)
     arr = plt.hist(yields, bins=yield_bins, alpha=0.7, label = f"n: {len(yields)}. {below} <= {floor}. T: {time_point} mins. Mean: {avg:.3f}", color = i_color, edgecolor="black")
-    #col_fig.suptitle(f"{jobname}: Histogram of "+"$F_{V}$/$F_{m}$.")   
     plt.xticks(yield_bins)
-    
     roof = round(max(arr[0])/100+1,0)*100
     #Make sure roof stays the same to keep scaling.
     if(roof < plt.ylim()[1]):
@@ -561,7 +558,7 @@ def plot_hists(yields,jobname, floor=0.2,time_point=0, i_color = "red"):
     
 
     if(len(col_fig.axes[0].get_lines())>20):
-        lgd = col_fig.legend(bbox_to_anchor=(0.65,1))
+        lgd = col_fig.legend(bbox_to_anchor=(0.45,1))
     col_fig.savefig(f"{output_dir}/{jobname}", bbox_inches='tight')
         
 def filter_conts(cnts,distance):    
