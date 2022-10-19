@@ -40,7 +40,7 @@ def load_PAM_Params(fp = "PAMset.txt"):
         print("No pamset text file found, proceeding with defaults")
         return []
 
-def perform_Analysis(fp,work_name, job_folder, batch = False, pamset=None):
+def perform_analysis(fp,work_name, job_folder, batch = False, pamset=None):
     
     """
 
@@ -283,9 +283,9 @@ def perform_Analysis(fp,work_name, job_folder, batch = False, pamset=None):
         imgheight = 480
         if(border > 0):
             yields = [frame[border:imgheight-border,border*2:imgwidth-border*2]for frame in tif]
-            yields = make_Yield_Images(yields)
+            yields = make_yield_images(yields)
         else:
-            yields = make_Yield_Images(tif)
+            yields = make_yield_images(tif)
         if(DEBUG):
             cv2.imshow("First yield image", np.asarray(yields[0],dtype=np.uint8))
         yields_for_img = (yields*255).astype(dtype = np.uint8)
@@ -369,7 +369,7 @@ def perform_Analysis(fp,work_name, job_folder, batch = False, pamset=None):
                 meanYields[cellidx,timeidx+3] = meanYield     
                 meanYields[cellidx,timeidx+3] = round(meanYields[cellidx,timeidx+3],3)
         #THRESHOLD FILTER
-        filteredYields = filter_Yields(meanYields[:,:], filterMethods)
+        filteredYields = filter_yields(meanYields[:,:], filterMethods)
         print(f"Yields remaining after filter: {len(filteredYields)}")
         if(len(filteredYields)==0):
             print("No yields remaining. Ending analysis of current file")
@@ -377,7 +377,7 @@ def perform_Analysis(fp,work_name, job_folder, batch = False, pamset=None):
         if(DEBUG):
             cv2.imshow("Numbered masks",numberedMask)
         cv2.imwrite(f'{output_folder}/' + work_name + '_' + fn + "numbered_masks.tif", numberedMask) 
-        subs, names,sortedYields = subdivide_Yield(filteredYields, method = sorting_meth, threshold_size = subpopthreshold_size, disc_pos = sorting_pos,floor = subpopfloor)
+        subs, names,sortedYields = subdivide_yield(filteredYields, method = sorting_meth, threshold_size = subpopthreshold_size, disc_pos = sorting_pos,floor = subpopfloor)
         with open(f'{output_folder}/' + work_name+'AllYields.csv', mode = 'a', newline="") as tot_file:
             tot_yield_writer = csv.writer(tot_file, delimiter = ",",quotechar = '"', quoting = csv.QUOTE_MINIMAL)
             times = ["Index","XPosition","YPosition"] + list(range(0,len(filteredYields[0]-3)*(intervall),intervall))
@@ -394,7 +394,7 @@ def perform_Analysis(fp,work_name, job_folder, batch = False, pamset=None):
                     yield_writer.writerow(part)    
                     tot_yield_writer.writerow(part)    
         if(create_Plots):
-            plot_Values(subs,names, work_name, fn,fovidx, intervall,floor=subpopfloor,legends = legends,errorbars=errorbars)      
+            plot_values(subs,names, work_name, fn,fovidx, intervall,floor=subpopfloor,legends = legends,errorbars=errorbars)      
         #For outside use, return our filtered yields
         outYields[f"{fn}"] = filteredYields
     if(create_Hists):
@@ -406,9 +406,9 @@ def perform_Analysis(fp,work_name, job_folder, batch = False, pamset=None):
                 unsorted_yields_end = np.concatenate((unsorted_yields_end, x[:,2+hist_end-start_point]))
         #print(len(list(outYields.values())))
         #unsorted_Yields = np.concatenate((list(outYields.values())),axis=1)       
-        plot_hists(unsorted_yields_start,work_name,subpopfloor,(hist_start-1)*intervall,"blue")
+        plot_histograms(unsorted_yields_start,work_name,subpopfloor,(hist_start-1)*intervall,"blue")
         if(hist_end != -1):
-            plot_hists(unsorted_yields_end,work_name,subpopfloor,(hist_end-start_point)*intervall,"green")
+            plot_histograms(unsorted_yields_end,work_name,subpopfloor,(hist_end-start_point)*intervall,"green")
             
     PlotAvg = False
     return outYields
@@ -419,7 +419,7 @@ def reanalyze(yields, indexes):
     return manFilteredYields
     
 
-def plot_Values(yields, names, jobname, filename, subjob, intervall = 5, rows = -1, columns = -1, mode = "Lines", floor = 0.2,legends=True, errorbars=True):
+def plot_values(yields, names, jobname, filename, subjob, intervall = 5, rows = -1, columns = -1, mode = "Lines", floor = 0.2,legends=True, errorbars=True):
     #Assumes that yields is formatted as yields.shape = [n(subplots),n(samples),n(values)]
     global PlotAvg
     rows = -1
@@ -529,7 +529,7 @@ def plot_Values(yields, names, jobname, filename, subjob, intervall = 5, rows = 
     #fig2.tight_layout()
     
     
-def plot_hists(yields,jobname, floor=0.2,time_point=0, i_color = "red"):
+def plot_histograms(yields,jobname, floor=0.2,time_point=0, i_color = "red"):
     print(f"Creating histograms for {jobname}")
     output_dir = f"Output/{jobname}"
     col_fig = plt.figure(f"{jobname}")
@@ -598,7 +598,7 @@ def filter_conts(cnts,distance):
 
 
     
-def filter_Yields(cellyields, meths):
+def filter_yields(cellyields, meths):
     SYD = False
     sydthres = 1
     #For uniqueness, use set
@@ -626,7 +626,7 @@ def filter_Yields(cellyields, meths):
         print(outputmsg)
     return np.delete(cellyields,list(remidxs),axis=0)
               
-def subdivide_Yield(cellyields, method = "Static_Bins",floor = 0, threshold_size = 0.25, disc_pos = 1):
+def subdivide_yield(cellyields, method = "Static_Bins",floor = 0, threshold_size = 0.25, disc_pos = 1):
     #Several modes for finding subpopulations
     #Static Value = Divides up in subpopulations based on the yield value in disc pos 
     #using static bins of threshold_size
@@ -674,7 +674,7 @@ def subdivide_Yield(cellyields, method = "Static_Bins",floor = 0, threshold_size
         raise NameError("Sorting method is not valid.")
     return subpops, names, sortedYields
      
-def make_Yield_Images(img_stack):
+def make_yield_images(img_stack):
     """
     Parameters
     ----------
@@ -806,12 +806,12 @@ args = parser.parse_args()
 cur_dir = os.getcwd()
 if(args.proj_fp is None):
     if(args.batch_flag):
-        outputdata = perform_Analysis(cur_dir,args.ProjectName,cur_dir,args.batch_flag,args.PAMSet)
+        outputdata = perform_analysis(cur_dir,args.ProjectName,cur_dir,args.batch_flag,args.PAMSet)
     else:
         print("Specify file path to analyze if batch mode not enabled. Exiting")
         sys.exit()
 else:
-    outputdata = perform_Analysis(args.proj_fp,args.ProjectName,cur_dir,args.batch_flag,args.PAMSet)
+    outputdata = perform_analysis(args.proj_fp,args.ProjectName,cur_dir,args.batch_flag,args.PAMSet)
 
 
 
