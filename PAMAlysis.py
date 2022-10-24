@@ -26,6 +26,10 @@ import cv2
 global filenames, DEBUG
 DEBUG = False
 
+font = {'family':'normal',
+        'size':18}
+plt.rc('font',**font)
+
 def load_PAM_Params(fp = "PAMset.txt"):
     try:
         with open(fp, mode='r') as file:
@@ -320,7 +324,7 @@ def perform_analysis(fp,work_name, job_folder, batch = False, pamset=None):
                 minX = border*2
                 minY = border
                 if(x+border*2 > minX and x+w+border*2 < maxX and y+border > minY and y+h+border < maxY):  
-                    if(len(size_filt_cnts) >= cell_limit):
+                    if(len(size_filt_cnts) > cell_limit):
                         size_filt_cnts.pop(random.randint(0,len(size_filt_cnts)-1))
                     size_filt_cnts.append(cnt)
         print(f"Contours remaining filtering with size thresholds: {minsize}-{maxsize} pixels are {len(size_filt_cnts)}")
@@ -341,7 +345,7 @@ def perform_analysis(fp,work_name, job_folder, batch = False, pamset=None):
                 cellcenter = [border + globalx+int((rect[0]+rect[2])/2)*4,border*2 + globaly+int((rect[1]+rect[3])/2)*4]
             else:
                 cellcenter = [border + int((rect[0]+rect[2])/2)*4,border*2 + int((rect[1]+rect[3])/2)*4]
-            cellMinis = yields[:,rect[1]-1:rect[1]+rect[3]+1,rect[0]-1:rect[0]+rect[2]+1]         
+            cellMinis = yields[:,rect[1]-1:rect[1]+rect[3]+1,rect[0]-1:rect[0]+rect[2]+1]     
             numberedMask = cv2.putText(numberedMask,str(cellidx), (rect[0]*2,(rect[1]+int(rect[3]/2))*2), cv2.FONT_HERSHEY_PLAIN, 1,(0,255,0),thickness = 1)
             zeroedidx = []
             for timeidx,img in enumerate(cellMinis):  
@@ -353,7 +357,7 @@ def perform_analysis(fp,work_name, job_folder, batch = False, pamset=None):
                         #We do this within warnings to catch completely nan-filled areas
                         #(Likely cells who have wandered off)
                         #We round to 3 digits because the base data is 8-bit. We should not create data where there could be none.
-                        meanYield = round(np.nanmean(np.where(img!=0,img,np.nan)),3)
+                        meanYield = np.nanmean(np.where(img!=0,img,np.nan))
                     except Warning:
                         if(cellidx not in zeroedidx):
                             if(DEBUG):
@@ -540,7 +544,7 @@ def plot_histograms(yields,jobname, floor=0.2,time_point=0, i_color = "red"):
     yields = yields[(yields>=floor)]
     avg=np.mean(yields)
     arr = plt.hist(yields, bins=yield_bins, alpha=0.7, label = f"n: {len(yields)}. {below} <= {floor}. T: {time_point} mins. Mean: {avg:.3f}", color = i_color, edgecolor="black")
-    plt.xticks(yield_bins)
+    plt.xticks(yield_bins,rotation=-45)
     roof = round(max(arr[0])/100+1,0)*100
     #Make sure roof stays the same to keep scaling.
     if(roof < plt.ylim()[1]):
@@ -693,19 +697,15 @@ def make_yield_images(img_stack):
     Yield = []
     for i in range(len(Fo)):
         #Remove s&p noise
-        Mask = np.where(Fo[i] > int(0.048*255),1,0)
+        Mask = np.where(Fm[i] > int(0.048*255),1,0)
         Mask = Mask.astype(np.uint8)        
         Mask = cv2.medianBlur(Mask,3)
-        Mask = np.where(Mask>0,1,0)
-        #ipdb.set_trace()
+        Mask = np.where(Mask>0,1,0) 
         Fv = np.subtract(Fm[i],Fo[i],dtype = np.int8)
         #Floor to zero
         Fv = np.multiply(np.clip(Fv,0,255),Mask)
-        #Fv = np.clip(Fv,0,255)
-        #ipdb.set_trace()
-        #cYield = np.divide(Fv,Fm[i],out=np.zeros_like(Fv),where=Fm[i]!=0)
         cYield = np.divide(Fv.astype(np.float16),Fm[i].astype(np.float16),out=np.zeros_like(Fv, dtype=np.float16),where=Fm[i]!=0)
-        cYield = np.round(cYield,decimals=3)
+        #cYield = np.round(cYield,decimals=3)
         Yield.append(cYield)
     return np.asarray(Yield)
     
