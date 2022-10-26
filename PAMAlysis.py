@@ -123,9 +123,9 @@ def perform_analysis(fp,work_name, job_folder, batch = False, pamset=None):
                 sorting_meth = str(settings['sorting_method'])
             except:
                 print("Unknown sorting method")
-        if('Sorting_Pos' in keys):
+        if('sorting_position' in keys):
             try:
-                sorting_pos = int(settings['Sorting_Pos'])
+                sorting_pos = int(settings['sorting_position'])
             except:
                 print("Unknown sorting ")
         if('border' in keys):
@@ -153,24 +153,24 @@ def perform_analysis(fp,work_name, job_folder, batch = False, pamset=None):
                         pass
             except:
                 print("SYD badly formatted")
-        if('Histogram' in keys):
+        if('histogram' in keys):
             try:
-                create_Hists = bool(int(settings['Histogram']))
+                create_Hists = bool(int(settings['histogram']))
             except:
                 print("Histogram badly formatted")
                 pass        
-        if('Hist_end' in keys):
+        if('hist_end' in keys):
             try:
-                hist_end = int(settings['Hist_end'])
+                hist_end = int(settings['hist_end'])
             except:
-                print("Hist end point badly formatted")
+                print("hist_end point badly formatted")
                 pass
-        if('Hist_start' in keys):
+        if('hist_start' in keys):
             try:
-                hist_start = int(settings['Hist_start'])
+                hist_start = int(settings['hist_start'])
             except:
                 print("Hist end point badly formatted")
-        if('Plots' in keys):
+        if('plots' in keys):
             try:
                 create_Plots = bool(int(settings['Plots']))
             except:
@@ -201,7 +201,7 @@ def perform_analysis(fp,work_name, job_folder, batch = False, pamset=None):
                 errorbars = bool(int(settings['errorbars']))
             except:
                 print("Bad format")
-        if(AOI_mode=="Cell_mask"):
+        if(AOI_mode=="cell_mask"):
             try:                
                 cell_mask_fp=job_folder + "/" + settings['Cell_mask_fp']
                 print(f"Cell_mask_fp: {cell_mask_fp}")
@@ -212,13 +212,16 @@ def perform_analysis(fp,work_name, job_folder, batch = False, pamset=None):
                 globalcoordinates=bool(int(settings['global_coordinates']))
             except:
                 print("Global coordinates badly formatted")
-        if('Max_Cells' in keys):
+        if('max_cells' in keys):
             try:
-                cell_limit=int(settings['Max_Cells'])
+                cell_limit=int(settings['max_cells'])
             except:
                 print("Max cells badly formatted")
         pprint.pprint(settings)
+        
     outYields = dict()
+    plot_figs= dict()
+    hist_fig = None
     if(batch):      
         fl = os.listdir(fp)
         tifs = [fp+ "/" + file for file in fl if ".tif" in file]
@@ -237,6 +240,7 @@ def perform_analysis(fp,work_name, job_folder, batch = False, pamset=None):
     except:
         pass
     #Start of actual analysis: Read files
+    
     for fovidx, current_tif in enumerate(tifs):
         if('/' in current_tif):
             fn = current_tif.split('/')[-1][:-4]
@@ -384,7 +388,7 @@ def perform_analysis(fp,work_name, job_folder, batch = False, pamset=None):
         subs, names,sortedYields = subdivide_yield(filteredYields, method = sorting_meth, threshold_size = subpopthreshold_size, disc_pos = sorting_pos,floor = subpopfloor)
         with open(f'{output_folder}/' + work_name+'AllYields.csv', mode = 'a', newline="") as tot_file:
             tot_yield_writer = csv.writer(tot_file, delimiter = ",",quotechar = '"', quoting = csv.QUOTE_MINIMAL)
-            times = ["Index","XPosition","YPosition"] + list(range(0,len(filteredYields[0]-3)*(intervall),intervall))
+            times = ["Index","XPosition","YPosition"] + list(range(0,len(sortedYields[0]-3)*(intervall),intervall))
             if(isinstance(settings,dict) and fovidx==0):
                 tot_yield_writer.writerow(list(settings.items()) + [str(datetime.date.today())])
                 tot_yield_writer.writerow(times)
@@ -398,9 +402,11 @@ def perform_analysis(fp,work_name, job_folder, batch = False, pamset=None):
                     yield_writer.writerow(part)    
                     tot_yield_writer.writerow(part)    
         if(create_Plots):
-            plot_values(subs,names, work_name, fn,fovidx, intervall,floor=subpopfloor,legends = legends,errorbars=errorbars)      
+            ksub,vsub,k,v = (tuple(plot_values(subs,names, work_name, fn,fovidx, intervall,floor=subpopfloor,legends = legends,errorbars=errorbars)))
+            plot_figs[ksub] = vsub
+            plot_figs[k] = v
         #For outside use, return our filtered yields
-        outYields[f"{fn}"] = filteredYields
+        outYields[f"{fn}"] = sortedYields
     if(create_Hists):
         unsorted_yields_start = []
         unsorted_yields_end = []
@@ -410,12 +416,12 @@ def perform_analysis(fp,work_name, job_folder, batch = False, pamset=None):
                 unsorted_yields_end = np.concatenate((unsorted_yields_end, x[:,2+hist_end-start_point]))
         #print(len(list(outYields.values())))
         #unsorted_Yields = np.concatenate((list(outYields.values())),axis=1)       
-        plot_histograms(unsorted_yields_start,work_name,subpopfloor,(hist_start-1)*intervall,"blue")
+        hist_fig = plot_histograms(unsorted_yields_start,work_name,subpopfloor,(hist_start-1)*intervall,"blue")
         if(hist_end != -1):
             plot_histograms(unsorted_yields_end,work_name,subpopfloor,(hist_end-start_point)*intervall,"green")
             
     PlotAvg = False
-    return outYields
+    return outYields, plot_figs, hist_fig
 
 def reanalyze(yields, indexes):
     #If you want to reanalyze only specific numbered cells.
@@ -471,7 +477,7 @@ def plot_values(yields, names, jobname, filename, subjob, intervall = 5, rows = 
     Position = range(1,tot + 1)
     #fig = plt.figure(figsize=(5*rows, 3*columns))
     plt.close(f"{jobname}: Subpopulations")
-    fig = plt.figure(f"{filename}: Subpopulations",figsize = (6*columns,5*rows))
+    fig = plt.figure(f"{filename}: Subpopulations",figsize = (8*columns,6*rows))
     fig.suptitle("Subpopulations")
     for k,subyields in enumerate(yields):
         # add every single subplot to the figure with a for loop
@@ -498,7 +504,6 @@ def plot_values(yields, names, jobname, filename, subjob, intervall = 5, rows = 
 
     #fig.tight_layout(pad = 3.0)
     fig.savefig(fname =f"{output_dir}/{jobname}_{subjob}_total_yields")
-    
     
     fig2 = plt.figure(f"{jobname}: Average_Yield",figsize = [6,5.5])
     fig2.suptitle(f"{jobname}: Average "+"$F_{V}$/$F_{m}$.")
@@ -531,7 +536,7 @@ def plot_values(yields, names, jobname, filename, subjob, intervall = 5, rows = 
     fig2.savefig(f"{output_dir}/{jobname}_Average_Yields", bbox_extra_artists=(lgd,), bbox_inches='tight')
     #fig2.legend(loc="upper left", ncol = 2)
     #fig2.tight_layout()
-    
+    return f"{output_dir}/{jobname}_{subjob}_total_yields", fig, f"{jobname}: Average_Yield", fig2
     
 def plot_histograms(yields,jobname, floor=0.2,time_point=0, i_color = "red"):
     print(f"Creating histograms for {jobname}")
@@ -564,6 +569,7 @@ def plot_histograms(yields,jobname, floor=0.2,time_point=0, i_color = "red"):
     if(len(col_fig.axes[0].get_lines())>20):
         lgd = col_fig.legend(bbox_to_anchor=(0.45,1))
     col_fig.savefig(f"{output_dir}/{jobname}", bbox_inches='tight')
+    return col_fig
         
 def filter_conts(cnts,distance):    
     """
@@ -804,6 +810,8 @@ parser.add_argument('-Debug',action='store_true', help="Switches on verbose outp
 
 args = parser.parse_args()
 cur_dir = os.getcwd()
+if(args.Debug):
+    DEBUG = True
 if(args.proj_fp is None):
     if(args.batch_flag):
         outputdata = perform_analysis(cur_dir,args.ProjectName,cur_dir,args.batch_flag,args.PAMSet)
@@ -811,7 +819,7 @@ if(args.proj_fp is None):
         print("Specify file path to analyze if batch mode not enabled. Exiting")
         sys.exit()
 else:
-    outputdata = perform_analysis(args.proj_fp,args.ProjectName,cur_dir,args.batch_flag,args.PAMSet)
+    outputdata,plots,hists = perform_analysis(args.proj_fp,args.ProjectName,cur_dir,args.batch_flag,args.PAMSet)
 
 
 
