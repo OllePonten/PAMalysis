@@ -14,12 +14,16 @@ PAMAlysis can either analyse a single stack of images or run in batch mode (-b) 
 
 # How to run
 PAMalysis is run as directly from the shell or via IPython or the Jupyter interactive shell. A typical run signature from cmd could look as follows:
+
 > python PAMAlysis.py Test_Project --FP C:/My_Experimental_Data/ -b
+
 This would run an analysis on all .tif files (-b = Batch Mode) contained in the "C:/My_Experimental_Data/" folder and output the results into a folder named "Test_Project"
 The equivalent IPython call:
 runfile('C:/PAMalysis/PAMAlysis.py', wdir='C:/', args ="Test_Project --FP My_Experimental_Data -b")
 The call
+
 > python PAMAlysis.py Test_Project --FP C:/My_Experimental_Data/ -PAMset PAMset.txt -b
+
 would perform the same analysis but applying the analysis parameters found in PAMset.txt. For more information on how to structure the settings file look under the heading PAMset.
 
 # Output
