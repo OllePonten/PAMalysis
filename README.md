@@ -1,6 +1,7 @@
 # PAMalysis
 PAMalysis: A Python analysis script for analysing Microscopy-IPAM tif images. Made by Olle Pontén, Uppsala University 2021. GPL license v3.
-#Required packages
+
+# Required packages
   Python >3.8
   numpy
   opencv >3.1
