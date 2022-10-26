@@ -19,7 +19,9 @@ PAMalysis is run as directly from the shell or via IPython or the Jupyter intera
 
 This would run an analysis on all .tif files (-b = Batch Mode) contained in the "C:/My_Experimental_Data/" folder and output the results into a folder named "Test_Project"
 The equivalent IPython call:
-runfile('C:/PAMalysis/PAMAlysis.py', wdir='C:/', args ="Test_Project --FP My_Experimental_Data -b")
+
+>runfile('C:/PAMalysis/PAMAlysis.py', wdir='C:/', args ="Test_Project --FP My_Experimental_Data -b")
+
 The call
 
 > python PAMAlysis.py Test_Project --FP C:/My_Experimental_Data/ -PAMset PAMset.txt -b
