@@ -15,8 +15,11 @@ PAMAlysis can either analyse a single stack of images or run in batch mode (-b) 
 
 # Input parameters
 > -h : Displays help
+
 > -PAMSet --P : Filepath to a sepearate PAMset file
+
 > -FilePath --FP : Filepath to either a folder with data files or a single tif file
+
 > -b : Batch mode. If provided -FilePath should be a folder. All tif files in that folder will be analyzed
 
 # How to run
