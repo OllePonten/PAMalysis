@@ -10,7 +10,7 @@ PAMalysis: A Python analysis script for analysing Microscopy-IPAM tif images. Ma
   
 
 # Useage
-PAMAlysis can either analyse a single stack of images or run in batch mode (-b) where it reads all tiff-files in the same folder and applies the same analysis.
+PAMalysis calculates the Fv/Fm image from a stack of F/Fm images and segments out objects based on inputs given by the user then calculates the mean Fv/Fm of these objects. Both the images and the calculated mean Fv/Fm is output as .tif image files and csv files respectively. PAMAlysis can either analyse a single .tif file or run in batch mode (-b) where it reads all .tif-files in the same folder and applies the same analysis.
 
 
 # Input parameters
