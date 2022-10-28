@@ -17,6 +17,7 @@ import random
 
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
 import cv2
 
 #CALL SIG:
@@ -66,9 +67,9 @@ def perform_analysis(fp,work_name, job_folder, batch = False, pamset=None):
     cv2.destroyAllWindows()
     plt.close('all')
     #### DEFAULT SETTINGS ####
-    AOI_mode = "Projection"
+    AOI_mode = "Ft_Masks"
     tifs = []
-    border = 75
+    border = 50
     intervall = 5
     minsize = 5
     maxsize = 60
@@ -478,8 +479,11 @@ def plot_values(yields, names, jobname, filename, subjob, intervall = 5, rows = 
     #fig = plt.figure(figsize=(5*rows, 3*columns))
     plt.close(f"{jobname}: Subpopulations")
     fig = plt.figure(f"{filename}: Subpopulations",figsize = (8*columns,6*rows))
+    cmap = plt.cm.get_cmap("viridis_r")
     fig.suptitle("Subpopulations")
     for k,subyields in enumerate(yields):
+        #norm = mcolors.Normalize(vmin=0,vmax=len(subyields))        
+        fig.suptitle("Subpopulations")
         # add every single subplot to the figure with a for loop
         ax = fig.add_subplot(rows,columns,Position[k])
         ax.set_title(names[k])
@@ -488,14 +492,15 @@ def plot_values(yields, names, jobname, filename, subjob, intervall = 5, rows = 
         ax.set_ylim(ylim)
         ax.set_xlim(xlim)
         subyields = [trim_yield[3:] for trim_yield in subyields]
+        norm = mcolors.Normalize(vmin=ylim[0]+0.2,vmax=np.max(subyields))
         avg_line = (np.mean(subyields,axis=0))
         avg_error = (np.std(subyields,axis=0))
         pop_size = len(subyields)
         avg_lines.append(avg_line)
         avg_errors.append(avg_error)
         avg_sizes.append(pop_size)
-        for part in subyields:
-            ax.plot(range(xlim[0],xlim[1],intervall),part, marker='o', markersize = 3, linewidth = 0.5)
+        for index, part in enumerate(subyields):
+            ax.plot(range(xlim[0],xlim[1],intervall),part, marker='o', markersize = 3, linewidth = 0.5, color=cmap(norm(part[-1])))
         plt.yticks(np.arange(ylim[0], ylim[1], step=(ylim[1]-ylim[0])/7), labels=None)
         plt.xticks(np.arange(0,xlim[1],step=xstep))
         ax.plot(range(xlim[0],xlim[1],intervall),avg_line, marker='o', markersize = 3, linewidth = 6,linestyle='dashed',color="black")
