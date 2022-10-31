@@ -354,7 +354,6 @@ def perform_analysis(fp,work_name, job_folder, batch = False, pamset=None):
         meanYields = np.zeros(shape=(len(size_filt_cnts),len(yields)+3))
         numberedMask = cv2.resize(filteredMask,(filteredMask.shape[1] *2, filteredMask.shape[0] * 2),interpolation = cv2.INTER_CUBIC)
         for cellidx, cnt in enumerate(size_filt_cnts):
-
             #Get minimum bounding rect
             rect = cv2.boundingRect(cnt)
             if(globalcoordinates):
@@ -423,18 +422,25 @@ def perform_analysis(fp,work_name, job_folder, batch = False, pamset=None):
         unsorted_yields_start = []
         unsorted_yields_end = []
         for x in list(outYields.values()):
-            unsorted_yields_start = np.concatenate((unsorted_yields_start, x[:,2+hist_start]))
+            #unsorted_yields_start = np.concatenate(unsorted_yields_start, x[:,2+hist_start])
+            x = np.asarray(x)
+            #unsorted_yields_start = np.concatenate((x[:,2+hist_start]))
+            unsorted_yields_start.extend(x[:,2+hist_start])
             if(hist_end != -1):            
                 unsorted_yields_end = np.concatenate((unsorted_yields_end, x[:,2+hist_end-start_point]))
         #print(len(list(outYields.values())))
         #unsorted_Yields = np.concatenate((list(outYields.values())),axis=1)       
-        hist_fig = plot_histograms(unsorted_yields_start,work_name,subpopfloor,(hist_start-1)*intervall,"blue")
+        hist_fig = plot_histograms(unsorted_yields_start,work_name, output_folder,subpopfloor,(hist_start-1)*intervall,"blue")
         if(hist_end != -1):
-            plot_histograms(unsorted_yields_end,work_name,subpopfloor,(hist_end-start_point)*intervall,"green")
+            plot_histograms(unsorted_yields_end,work_name, output_folder,subpopfloor,(hist_end-start_point)*intervall,"green")
+    
+        #hist_fig.legend(loc="upper right",bbox_to_anchor=(0.9,0.88))
+        hist_fig.savefig(f"{output_folder}/{work_name}_Histogram", bbox_inches='tight')
     if(create_Plots):
        # avg_fig.legend(loc="upper center", ncol=2,bbox_to_anchor=(0.7,0.9))
         #avg_fig.legend()
         avg_fig.savefig(f"{output_folder}/{work_name}_Average_Yields", )
+    
     PlotAvg = False
     return outYields, plot_figs, hist_fig
 
@@ -558,34 +564,26 @@ def plot_values(yields, names, jobname, output_dir, filename, subjob, intervall 
     
 def plot_histograms(yields,jobname, out_dir, floor=0.2,time_point=0, i_color = "red"):
     print(f"Creating histograms for {jobname}")
-    col_fig = plt.figure(f"{jobname}")
+    col_fig = plt.figure(f"{jobname}", figsize = [12,10])
     plt.xlabel("$F_{V}$/$F_{m}$")
     plt.ylabel("Count")
-    yield_bins=np.linspace(floor,0.8,num=(round((0.8-floor)/0.05)+1))
+    plt.minorticks_on()
+    #plt.axes().xaxis.set_tick_params(which='minor', right = 'off')
+    yield_bins=np.linspace(floor,0.7,num=(round((0.7-floor)/0.05)+1))
     below = len([i for i in yields if i <= floor])
+    yields = np.asarray(yields)
     yields = yields[(yields>=floor)]
     avg=np.mean(yields)
-    arr = plt.hist(yields, bins=yield_bins, alpha=0.7, label = f"n: {len(yields)}. {below} <= {floor}. T: {time_point} mins. Mean: {avg:.3f}", color = i_color, edgecolor="black")
+    arr = plt.hist(yields, bins=yield_bins, alpha=0.7, label = f"n: {len(yields)}. T: {time_point} mins. Mean: {avg:.3f}", edgecolor=i_color , align="mid", fill=False,orientation="vertical", hatch="//")
     plt.xticks(yield_bins,rotation=-45)
     roof = round(max(arr[0])/100+1,0)*100
     #Make sure roof stays the same to keep scaling.
     if(roof < plt.ylim()[1]):
         roof = plt.ylim()[1]
     plt.ylim(0,roof)
-    for i in range(len((yield_bins))-1):
-        if(i_color=="blue"):
-            plt.text(arr[1][i]+0.01,arr[0][i]+0.2,str(int(arr[0][i])),color="blue")
-            plt.axvline(avg,linestyle='dashed',color="blue")
-            #plt.text(max(yield_bins)-0.12,plt.ylim()[1]*1.02,f"Mean: {avg:.3f}",color="blue")
-        else:
-            plt.text(arr[1][i]+0.03,arr[0][i]+0.2,str(int(arr[0][i])),color=i_color)
-            plt.axvline(avg,linestyle='dashed',color=i_color)
-            #plt.text(max(yield_bins)-0.12,plt.ylim()[1]*0.96,f"Mean: {avg:.3f}",color=i_color)
     
+    plt.axvline(avg,linestyle='dashed',color=i_color)
 
-    if(len(col_fig.axes[0].get_lines())>20):
-        lgd = col_fig.legend(bbox_to_anchor=(0.45,1))
-    col_fig.savefig(f"{out_dir}/{jobname}_Histogram", bbox_inches='tight')
     return col_fig
         
 def filter_conts(cnts,distance):    
