@@ -430,9 +430,9 @@ def perform_analysis(fp,work_name, job_folder, batch = False, pamset=None):
                 unsorted_yields_end = np.concatenate((unsorted_yields_end, x[:,2+hist_end-start_point]))
         #print(len(list(outYields.values())))
         #unsorted_Yields = np.concatenate((list(outYields.values())),axis=1)       
-        hist_fig = plot_histograms(unsorted_yields_start,work_name, output_folder,subpopfloor,(hist_start-1)*intervall,"blue")
+        hist_fig = plot_histograms(unsorted_yields_start,work_name, output_folder,subpopfloor,(hist_start-1)*intervall,"blue","//")
         if(hist_end != -1):
-            plot_histograms(unsorted_yields_end,work_name, output_folder,subpopfloor,(hist_end-start_point)*intervall,"green")
+            plot_histograms(unsorted_yields_end,work_name, output_folder,subpopfloor,(hist_end-start_point)*intervall,"green","\\")
     
         #hist_fig.legend(loc="upper right",bbox_to_anchor=(0.9,0.88))
         hist_fig.savefig(f"{output_folder}/{work_name}_Histogram", bbox_inches='tight')
@@ -562,7 +562,7 @@ def plot_values(yields, names, jobname, output_dir, filename, subjob, intervall 
     #fig2.tight_layout()
     return f"{output_dir}/{jobname}_{subjob}_total_yields", fig, f"{jobname}: Average_Yield", fig2
     
-def plot_histograms(yields,jobname, out_dir, floor=0.2,time_point=0, i_color = "red"):
+def plot_histograms(yields,jobname, out_dir, floor=0.2,time_point=0, i_color = "red",hatch_char="/"):
     print(f"Creating histograms for {jobname}")
     col_fig = plt.figure(f"{jobname}", figsize = [12,10])
     plt.xlabel("$F_{V}$/$F_{m}$")
@@ -574,7 +574,7 @@ def plot_histograms(yields,jobname, out_dir, floor=0.2,time_point=0, i_color = "
     yields = np.asarray(yields)
     yields = yields[(yields>=floor)]
     avg=np.mean(yields)
-    arr = plt.hist(yields, bins=yield_bins, alpha=0.7, label = f"n: {len(yields)}. T: {time_point} mins. Mean: {avg:.3f}", edgecolor=i_color , align="mid", fill=False,orientation="vertical", hatch="//")
+    arr = plt.hist(yields, bins=yield_bins, alpha=0.7, label = f"n: {len(yields)}. T: {time_point} mins. Mean: {avg:.3f}", edgecolor=i_color , align="mid", fill=False,orientation="vertical", hatch=hatch_char)
     plt.xticks(yield_bins,rotation=-45)
     roof = round(max(arr[0])/100+1,0)*100
     #Make sure roof stays the same to keep scaling.
