@@ -266,6 +266,7 @@ def perform_analysis(fp,work_name, job_folder, batch = False, pamset=None):
                 tif = tif[4+(start_point*2):4+(end_point)]
                 print(f"Analysing slices: {5+start_point*2}:{end_point}")
             else:
+                end_point = orig_end_point
                 tif = tif[4+(start_point*2):4+(end_point*2)]
                 print(f"Analysing slices: {5+start_point*2}:{end_point*2}")
             #Assume first are Black/NIR/Start images.     
