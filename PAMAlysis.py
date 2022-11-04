@@ -73,8 +73,8 @@ def perform_analysis(fp,work_name, job_folder, batch = False, pamset=None):
     intervall = 5
     minsize = 5
     maxsize = 60
-    subpopthreshold_size = 0.9
-    subpopfloor = 0.1
+    subpopthreshold_size = 1
+    subpopfloor = 0.05
     threshold = 0.048
     create_Hists = False
     create_Plots = True
@@ -87,6 +87,7 @@ def perform_analysis(fp,work_name, job_folder, batch = False, pamset=None):
     end_point=-1
     hist_end=-1
     filterMethods = {"SYD":0.3}
+    filterMethods.pop("SYD")
     cell_mask_fp=""
     sorting_meth = "Static_Bins"
     sorting_pos=1
@@ -228,6 +229,8 @@ def perform_analysis(fp,work_name, job_folder, batch = False, pamset=None):
     outYields = dict()
     plot_figs= dict()
     hist_fig = None
+    avg_fig = None
+    output_folder = fp+"/Output/"+work_name
     if(batch):      
         fl = os.listdir(fp)
         tifs = [fp+ "/" + file for file in fl if ".tif" in file]
@@ -235,8 +238,8 @@ def perform_analysis(fp,work_name, job_folder, batch = False, pamset=None):
         print(f"Analysing following files: {str(tifs)}")
     else:
         tifs = [fp]
-    #Clean up output folder
-    output_folder = fp+"/Output/"+work_name
+        output_folder = "/".join(fp.split("/")[:-1])+"/Output/"+work_name
+    #Clean up output folder    
     try:
         os.makedirs(output_folder)
     except OSError:
@@ -245,6 +248,7 @@ def perform_analysis(fp,work_name, job_folder, batch = False, pamset=None):
         os.remove(f'{output_folder}/' + work_name+'AllYields.csv')
     except:
         pass
+    print(f"Saving output to {output_folder}")
     #Start of actual analysis: Read files
     
     for fovidx, current_tif in enumerate(tifs):
@@ -266,7 +270,6 @@ def perform_analysis(fp,work_name, job_folder, batch = False, pamset=None):
                 tif = tif[4+(start_point*2):4+(end_point)]
                 print(f"Analysing slices: {5+start_point*2}:{end_point}")
             else:
-                end_point = orig_end_point
                 tif = tif[4+(start_point*2):4+(end_point*2)]
                 print(f"Analysing slices: {5+start_point*2}:{end_point*2}")
             #Assume first are Black/NIR/Start images.     
@@ -391,56 +394,60 @@ def perform_analysis(fp,work_name, job_folder, batch = False, pamset=None):
         #THRESHOLD FILTER
         filteredYields = filter_yields(meanYields[:,:], filterMethods,subpopfloor)
         print(f"Yields remaining after filter: {len(filteredYields)}")
+        cv2.imwrite(f'{output_folder}/' + work_name + '_' + fn + "numbered_masks.tif", numberedMask) 
+
+        if(DEBUG):
+            cv2.imshow("Numbered masks",numberedMask)
+        
+        
+        subs, names,sortedYields = subdivide_yield(filteredYields, method = sorting_meth, threshold_size = subpopthreshold_size, disc_pos = sorting_pos,floor = subpopfloor)
         if(len(filteredYields)==0):
             print("No yields remaining. Ending analysis of current file")
             continue
-        if(DEBUG):
-            cv2.imshow("Numbered masks",numberedMask)
-        cv2.imwrite(f'{output_folder}/' + work_name + '_' + fn + "numbered_masks.tif", numberedMask) 
-        subs, names,sortedYields = subdivide_yield(filteredYields, method = sorting_meth, threshold_size = subpopthreshold_size, disc_pos = sorting_pos,floor = subpopfloor)
-        with open(f'{output_folder}/' + work_name+'AllYields.csv', mode = 'a', newline="") as tot_file:
-            tot_yield_writer = csv.writer(tot_file, delimiter = ",",quotechar = '"', quoting = csv.QUOTE_MINIMAL)
-            times = ["Index","XPosition","YPosition"] + list(range(0,len(sortedYields[0]-3)*(intervall),intervall))
-            if(isinstance(settings,dict) and fovidx==0):
-                tot_yield_writer.writerow(list(settings.items()) + [str(datetime.date.today())])
-                tot_yield_writer.writerow(times)
-            with open(f'{output_folder}/' + work_name +'_'+ fn + '.csv', mode = 'w',newline="") as pos_file:
-                yield_writer = csv.writer(pos_file, delimiter = ",",quotechar = '"', quoting = csv.QUOTE_MINIMAL)
-                yield_writer.writerow(fn)
-                if(isinstance(settings,dict)):
-                    yield_writer.writerow(settings.items() )
-                    yield_writer.writerow(times)
-                for idx,part in enumerate(sortedYields):
-                    yield_writer.writerow(part)    
-                    tot_yield_writer.writerow(part)    
-        if(create_Plots):
-            ksub,vsub,k,v = (tuple(plot_values(subs,names, work_name, output_folder, fn,fovidx, intervall,floor=subpopfloor,legends = legends,errorbars=errorbars)))
-            plot_figs[ksub] = vsub
-            avg_fig = v
-        #For outside use, return our filtered yields
-        outYields[f"{fn}"] = sortedYields
-    if(create_Hists):
-        unsorted_yields_start = []
-        unsorted_yields_end = []
-        for x in list(outYields.values()):
-            #unsorted_yields_start = np.concatenate(unsorted_yields_start, x[:,2+hist_start])
-            x = np.asarray(x)
-            #unsorted_yields_start = np.concatenate((x[:,2+hist_start]))
-            unsorted_yields_start.extend(x[:,2+hist_start])
-            if(hist_end != -1):            
-                unsorted_yields_end = np.concatenate((unsorted_yields_end, x[:,2+hist_end-start_point]))
-        #print(len(list(outYields.values())))
-        #unsorted_Yields = np.concatenate((list(outYields.values())),axis=1)       
-        hist_fig = plot_histograms(unsorted_yields_start,work_name, output_folder,subpopfloor,(hist_start-1)*intervall,"blue","//")
-        if(hist_end != -1):
-            plot_histograms(unsorted_yields_end,work_name, output_folder,subpopfloor,(hist_end-start_point)*intervall,"green","\\")
-    
-        #hist_fig.legend(loc="upper right",bbox_to_anchor=(0.9,0.88))
-        hist_fig.savefig(f"{output_folder}/{work_name}_Histogram", bbox_inches='tight')
-    if(create_Plots):
-       # avg_fig.legend(loc="upper center", ncol=2,bbox_to_anchor=(0.7,0.9))
-        #avg_fig.legend()
-        avg_fig.savefig(f"{output_folder}/{work_name}_Average_Yields", )
+        else:
+            with open(f'{output_folder}/' + work_name+'AllYields.csv', mode = 'a', newline="") as tot_file:
+                tot_yield_writer = csv.writer(tot_file, delimiter = ",",quotechar = '"', quoting = csv.QUOTE_MINIMAL)
+                times = ["Index","XPosition","YPosition"] + list(range(0,len(sortedYields[0]-3)*(intervall),intervall))
+                if(isinstance(settings,dict) and fovidx==0):
+                    tot_yield_writer.writerow(list(settings.items()) + [str(datetime.date.today())])
+                    tot_yield_writer.writerow(times)
+                with open(f'{output_folder}/' + work_name +'_'+ fn + '.csv', mode = 'w',newline="") as pos_file:
+                    yield_writer = csv.writer(pos_file, delimiter = ",",quotechar = '"', quoting = csv.QUOTE_MINIMAL)
+                    yield_writer.writerow(fn)
+                    if(isinstance(settings,dict)):
+                        yield_writer.writerow(settings.items() )
+                        yield_writer.writerow(times)
+                    for idx,part in enumerate(sortedYields):
+                        yield_writer.writerow(part)    
+                        tot_yield_writer.writerow(part)    
+            if(create_Plots):
+                ksub,vsub,k,v = (tuple(plot_values(subs,names, work_name, output_folder, fn,fovidx, intervall,floor=subpopfloor,legends = legends,errorbars=errorbars)))
+                plot_figs[ksub] = vsub
+                avg_fig = v
+            #For outside use, return our filtered yields
+            outYields[f"{fn}"] = sortedYields
+            if(create_Hists):
+                unsorted_yields_start = []
+                unsorted_yields_end = []
+                for x in list(outYields.values()):
+                    #unsorted_yields_start = np.concatenate(unsorted_yields_start, x[:,2+hist_start])
+                    x = np.asarray(x)
+                    #unsorted_yields_start = np.concatenate((x[:,2+hist_start]))
+                    unsorted_yields_start.extend(x[:,2+hist_start])
+                    if(hist_end != -1):            
+                        unsorted_yields_end = np.concatenate((unsorted_yields_end, x[:,2+hist_end-start_point]))
+                #print(len(list(outYields.values())))
+                #unsorted_Yields = np.concatenate((list(outYields.values())),axis=1)       
+                hist_fig = plot_histograms(unsorted_yields_start,work_name, output_folder,subpopfloor,(hist_start-1)*intervall,"blue")
+                if(hist_end != -1):
+                    plot_histograms(unsorted_yields_end,work_name, output_folder,subpopfloor,(hist_end-start_point)*intervall,"green")
+            
+                #hist_fig.legend(loc="upper right",bbox_to_anchor=(0.9,0.88))
+                hist_fig.savefig(f"{output_folder}/{work_name}_Histogram", bbox_inches='tight')
+            if(create_Plots):
+               # avg_fig.legend(loc="upper center", ncol=2,bbox_to_anchor=(0.7,0.9))
+                #avg_fig.legend()
+                avg_fig.savefig(f"{output_folder}/{work_name}_Average_Yields", )
     
     PlotAvg = False
     return outYields, plot_figs, hist_fig
@@ -563,7 +570,7 @@ def plot_values(yields, names, jobname, output_dir, filename, subjob, intervall 
     #fig2.tight_layout()
     return f"{output_dir}/{jobname}_{subjob}_total_yields", fig, f"{jobname}: Average_Yield", fig2
     
-def plot_histograms(yields,jobname, out_dir, floor=0.2,time_point=0, i_color = "red",hatch_char="/"):
+def plot_histograms(yields,jobname, out_dir, floor=0.2,time_point=0, i_color = "red"):
     print(f"Creating histograms for {jobname}")
     col_fig = plt.figure(f"{jobname}", figsize = [12,10])
     plt.xlabel("$F_{V}$/$F_{m}$")
@@ -575,7 +582,7 @@ def plot_histograms(yields,jobname, out_dir, floor=0.2,time_point=0, i_color = "
     yields = np.asarray(yields)
     yields = yields[(yields>=floor)]
     avg=np.mean(yields)
-    arr = plt.hist(yields, bins=yield_bins, alpha=0.7, label = f"n: {len(yields)}. T: {time_point} mins. Mean: {avg:.3f}", edgecolor=i_color , align="mid", fill=False,orientation="vertical", hatch=hatch_char)
+    arr = plt.hist(yields, bins=yield_bins, alpha=0.7, label = f"n: {len(yields)}. T: {time_point} mins. Mean: {avg:.3f}", edgecolor=i_color , align="mid", fill=False,orientation="vertical", hatch="//")
     plt.xticks(yield_bins,rotation=-45)
     roof = round(max(arr[0])/100+1,0)*100
     #Make sure roof stays the same to keep scaling.
