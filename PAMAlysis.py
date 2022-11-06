@@ -67,7 +67,7 @@ class IPAMAnalyzer:
                 print("maxsize badly formatted")
         if('floor' in keys):
             try:
-                self.settings['subpopfloor'] = float(file_settings['floor'])
+                self.settings['floor'] = float(file_settings['floor'])
             except:
                 print("floor badly formatted")
         if('subpop_size' in keys):
@@ -202,15 +202,15 @@ class IPAMAnalyzer:
         global PlotAvg
         cv2.destroyAllWindows()
         plt.close('all')
+        tifs = []
         #### DEFAULT SETTINGS ####
         self.settings['AOI_mode'] = "Ft_Masks"
-        tifs = []
         self.settings['border'] = 50
         self.settings['intervall'] = 5
         self.settings['minsize'] = 5
         self.settings['maxsize'] = 60
         self.settings['subpopthreshold_size'] = 1
-        self.settings['subpopfloor'] = 0.05
+        self.settings['floor'] = 0.05
         self.settings['threshold'] = 0.048
         self.settings['create_Hists'] = False
         self.settings['create_Plots'] = True
@@ -231,6 +231,7 @@ class IPAMAnalyzer:
         self.settings['cell_limit']=2000
         self.settings['cell_dist'] = -1
         #########################
+        
         file_settings = load_PAM_Params(pamset)
         if(len(file_settings) > 0):
             self.map_PAMSet(file_settings)
@@ -241,15 +242,19 @@ class IPAMAnalyzer:
         
         self.outYields = dict()
         self.figures= dict()
+        self.project_name = work_name
         self.output_folder = fp+"/Output/"+work_name
         if(batch):      
             fl = os.listdir(fp)
             tifs = [fp+ "/" + file for file in fl if ".tif" in file]
             print("Running batch mode")
             print(f"Analysing following files: {str(tifs)}")
+            if(len(tifs)==0):
+                print("No tif files found at provided filepath. Aborting")
+                sys.exit()
         else:
             tifs = [fp]
-            output_folder = "/".join(fp.split("/")[:-1])+"/Output/"+work_name
+            self.output_folder = "/".join(fp.split("/")[:-1])+"/Output/"+work_name
         #Clean up output folder    
         try:
             os.makedirs(self.output_folder)
@@ -261,7 +266,6 @@ class IPAMAnalyzer:
             pass
         print(f"Saving output to {self.output_folder}")
         #Start of actual analysis: Read files
-        
         for fovidx, current_tif in enumerate(tifs):
             if('/' in current_tif):
                 fn = current_tif.split('/')[-1][:-4]
@@ -271,7 +275,7 @@ class IPAMAnalyzer:
                 tif = tifffile.imread(current_tif)
                 print(f"Analysing {fn}.tif")
             except:
-                input(f"Could not load image: {fn} Please check filename")
+                input(f"Could not load image: {fn} Please check filename. Aborting")
                 sys.exit()
             print(f"Read in file: {current_tif} with {int((len(tif)-4)/2)} time points")
             if(len(tif) > 6):
@@ -404,7 +408,7 @@ class IPAMAnalyzer:
                     meanYields[cellidx,timeidx+3] = meanYield     
                     meanYields[cellidx,timeidx+3] = round(meanYields[cellidx,timeidx+3],3)
             #THRESHOLD FILTER
-            filteredYields = self.filter_yields(meanYields[:,:], self.settings['filter_methods'],self.settings['subpopfloor'])
+            filteredYields = self.filter_yields(meanYields[:,:], self.settings['filter_methods'],self.settings['floor'])
             print(f"Yields remaining after filter: {len(filteredYields)}")
             cv2.imwrite(f'{self.output_folder}/' + work_name + '_' + fn + "numbered_masks.tif", numberedMask) 
     
@@ -412,7 +416,7 @@ class IPAMAnalyzer:
                 cv2.imshow("Numbered masks",numberedMask)
             
             
-            subs, names,sortedYields = self.subdivide_yield(filteredYields, threshold_size = self.settings['subpopthreshold_size'],floor = self.settings['subpopfloor'])
+            subs, names,sortedYields = self.subdivide_yield(filteredYields, threshold_size = self.settings['subpopthreshold_size'],floor = self.settings['floor'])
             with open(f'{self.output_folder}/' + work_name+'AllYields.csv', mode = 'a', newline="") as tot_file:
                 tot_yield_writer = csv.writer(tot_file, delimiter = ",",quotechar = '"', quoting = csv.QUOTE_MINIMAL)
                 times = ["Index","XPosition","YPosition"] + list(range(0,len(sortedYields[0]-3)*(self.settings['intervall']),self.settings['intervall']))
@@ -443,9 +447,9 @@ class IPAMAnalyzer:
                     unsorted_yields_end = np.concatenate((unsorted_yields_end, x[:,2+self.settings['hist_end']-self.settings['start_point']]))
             #print(len(list(outYields.values())))
             #unsorted_Yields = np.concatenate((list(outYields.values())),axis=1)       
-            self.hist_fig = self.plot_histograms(unsorted_yields_start,work_name, self.output_folder,self.settings['subpopfloor'],(self.settings['hist_start']-1)*self.settings['intervall'],"blue","//")
+            self.hist_fig = self.plot_histograms(unsorted_yields_start,(self.settings['hist_start']-1)*self.settings['intervall'],"blue","//")
             if(self.settings['hist_end'] != -1):
-                self.plot_histograms(unsorted_yields_end,work_name, self.output_folder,self.settings['subpopfloor'],(self.settings['hist_end']-self.settings['start_point'])*self.settings['intervall'],"green","\\")
+                self.plot_histograms(unsorted_yields_end,(self.settings['hist_end']-self.settings['start_point'])*self.settings['intervall'],"green","\\")
         
             #hist_fig.legend(loc="upper right",bbox_to_anchor=(0.9,0.88))
             self.hist_fig.savefig(f"{self.output_folder}/{work_name}_Histogram", bbox_inches='tight')
@@ -573,19 +577,20 @@ class IPAMAnalyzer:
         #fig2.tight_layout()
         
         self.figures[f"{jobname}_{subjob}_total_yields"] = fig 
+        print(f"{jobname}: Average_Yield")
         self.figures[f"{jobname}: Average_Yield"] =  fig2
         
-    def plot_histograms(self,yields,jobname, out_dir, floor=0.2,time_point=0, i_color = "red",hatch_char="/"):
-        print(f"Creating histograms for {jobname}")
-        col_fig = plt.figure(f"{jobname}", figsize = [12,10])
+    def plot_histograms(self,yields,time_point=0, i_color = "red",hatch_char="/"):
+        print(f"Creating histograms for {self.project_name}")
+        col_fig = plt.figure(f"{self.project_name }", figsize = [12,10])
         plt.xlabel("$F_{V}$/$F_{m}$")
         plt.ylabel("Count")
         plt.minorticks_on()
         #plt.axes().xaxis.set_tick_params(which='minor', right = 'off')
-        yield_bins=np.linspace(floor,0.7,num=(round((0.7-floor)/0.05)+1))
-        below = len([i for i in yields if i <= floor])
+        yield_bins=np.linspace(self.settings['floor'],0.7,num=(round((0.7-self.settings['floor'])/0.05)+1))
+        below = len([i for i in yields if i <= self.settings['floor']])
         yields = np.asarray(yields)
-        yields = yields[(yields>=floor)]
+        yields = yields[(yields>=self.settings['floor'])]
         avg=np.mean(yields)
         arr = plt.hist(yields, bins=yield_bins, alpha=0.7, label = f"n: {len(yields)}. T: {time_point} mins. Mean: {avg:.3f}", edgecolor=i_color , align="mid", fill=False,orientation="vertical", hatch=hatch_char)
         plt.xticks(yield_bins,rotation=-45)
@@ -845,7 +850,8 @@ cur_dir = os.getcwd()
 PAMAlysis_Inst = IPAMAnalyzer()
 
 #Interactive, gradual version
-
+if(args.Debug):
+    DEBUG = True
 if(args.Interactive):
     print("Thank for you for using the interactive mode. Please note that this is still a beta feature, so I appreciate all feedback when using this analysis mode.\n")
     chosenPAMSet = False
@@ -891,18 +897,15 @@ if(args.Interactive):
             confirm =""
             print("Aborted.")   
 
-    outputdata,plots,hists = PAMAlysis_Inst.perform_analysis(cur_dir,args.ProjectName,cur_dir,batch,PAMsetFP)
+    outputdata,plots,hists = PAMAlysis_Inst.perform_analysis(FP,args.ProjectName,cur_dir,batch,PAMsetFP)
     
-if(args.Debug):
-    DEBUG = True
-if(args.proj_fp is None):
+elif(args.proj_fp is None):
     if(args.batch_flag):
         outputdata,plots,hists = PAMAlysis_Inst.perform_analysis(cur_dir,args.ProjectName,cur_dir,args.batch_flag,args.PAMSet)
     else:
         print("Specify file path to analyze if batch mode not enabled. Exiting")
         sys.exit()
 else:
-    print(args.proj_fp)
     outputdata,plots,hists = PAMAlysis_Inst.perform_analysis(args.proj_fp,args.ProjectName,args.proj_fp,args.batch_flag,args.PAMSet)
 
 
