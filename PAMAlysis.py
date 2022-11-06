@@ -73,8 +73,8 @@ def perform_analysis(fp,work_name, job_folder, batch = False, pamset=None):
     intervall = 5
     minsize = 5
     maxsize = 60
-    subpopthreshold_size = 0.9
-    subpopfloor = 0.1
+    subpopthreshold_size = 1
+    subpopfloor = 0.05
     threshold = 0.048
     create_Hists = False
     create_Plots = True
@@ -87,6 +87,7 @@ def perform_analysis(fp,work_name, job_folder, batch = False, pamset=None):
     end_point=-1
     hist_end=-1
     filterMethods = {"SYD":0.3}
+    filterMethods.pop("SYD")
     cell_mask_fp=""
     sorting_meth = "Static_Bins"
     sorting_pos=1
@@ -228,6 +229,8 @@ def perform_analysis(fp,work_name, job_folder, batch = False, pamset=None):
     outYields = dict()
     plot_figs= dict()
     hist_fig = None
+    avg_fig = None
+    output_folder = fp+"/Output/"+work_name
     if(batch):      
         fl = os.listdir(fp)
         tifs = [fp+ "/" + file for file in fl if ".tif" in file]
@@ -235,8 +238,8 @@ def perform_analysis(fp,work_name, job_folder, batch = False, pamset=None):
         print(f"Analysing following files: {str(tifs)}")
     else:
         tifs = [fp]
-    #Clean up output folder
-    output_folder = fp+"/Output/"+work_name
+        output_folder = "/".join(fp.split("/")[:-1])+"/Output/"+work_name
+    #Clean up output folder    
     try:
         os.makedirs(output_folder)
     except OSError:
@@ -245,6 +248,7 @@ def perform_analysis(fp,work_name, job_folder, batch = False, pamset=None):
         os.remove(f'{output_folder}/' + work_name+'AllYields.csv')
     except:
         pass
+    print(f"Saving output to {output_folder}")
     #Start of actual analysis: Read files
     
     for fovidx, current_tif in enumerate(tifs):
@@ -391,12 +395,12 @@ def perform_analysis(fp,work_name, job_folder, batch = False, pamset=None):
         #THRESHOLD FILTER
         filteredYields = filter_yields(meanYields[:,:], filterMethods,subpopfloor)
         print(f"Yields remaining after filter: {len(filteredYields)}")
-        if(len(filteredYields)==0):
-            print("No yields remaining. Ending analysis of current file")
-            continue
+        cv2.imwrite(f'{output_folder}/' + work_name + '_' + fn + "numbered_masks.tif", numberedMask) 
+
         if(DEBUG):
             cv2.imshow("Numbered masks",numberedMask)
-        cv2.imwrite(f'{output_folder}/' + work_name + '_' + fn + "numbered_masks.tif", numberedMask) 
+        
+        
         subs, names,sortedYields = subdivide_yield(filteredYields, method = sorting_meth, threshold_size = subpopthreshold_size, disc_pos = sorting_pos,floor = subpopfloor)
         with open(f'{output_folder}/' + work_name+'AllYields.csv', mode = 'a', newline="") as tot_file:
             tot_yield_writer = csv.writer(tot_file, delimiter = ",",quotechar = '"', quoting = csv.QUOTE_MINIMAL)
