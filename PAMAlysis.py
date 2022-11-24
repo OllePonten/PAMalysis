@@ -20,9 +20,6 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import cv2
 
-#CALL SIG:
-#runfile('C:/Users/ollpo511/Documents/GitHub/PAMalysis/PAMAlysis.py', wdir='C:Users/ollpo511/Documents', args = '{Project_Name} {PAMSet filename}')
-
 
 global filenames, DEBUG
 DEBUG = False
@@ -42,6 +39,7 @@ def load_PAM_Params(fp = "PAMset.txt"):
             params = dict(lines)
             return params
     except FileNotFoundError:
+        print(f"Filepath: {os.getcwd()+fp} did not end in a valid PAMset file.")
         print("No pamset text file found, proceeding with defaults")
         return []
 
@@ -64,6 +62,8 @@ def perform_analysis(fp,work_name, job_folder, batch = False, pamset=None):
     """
     global DEBUG
     global PlotAvg
+    data_dir=os.getcwd()+"\\"+fp
+    print(f"Searching for data at:{data_dir}")
     cv2.destroyAllWindows()
     plt.close('all')
     #### DEFAULT SETTINGS ####
@@ -92,7 +92,7 @@ def perform_analysis(fp,work_name, job_folder, batch = False, pamset=None):
     sorting_meth = "Static_Bins"
     sorting_pos=1
     #########################
-    settings = load_PAM_Params(pamset)
+    settings = load_PAM_Params(fp +"/"+ pamset)
     output_folder = ""
     filenames = []
     PlotAvg = False
@@ -842,7 +842,7 @@ if(args.Debug):
     DEBUG = True
 if(args.proj_fp is None):
     if(args.batch_flag):
-        outputdata = perform_analysis(cur_dir,args.ProjectName,cur_dir,args.batch_flag,args.PAMSet)
+        outputdata,plots,hists = perform_analysis(cur_dir,args.ProjectName,cur_dir,args.batch_flag,args.PAMSet)
     else:
         print("Specify file path to analyze if batch mode not enabled. Exiting")
         sys.exit()
