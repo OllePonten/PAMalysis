@@ -27,11 +27,6 @@ import cv2
 global filenames, DEBUG
 DEBUG = False
 
-font = {'family':'normal',
-        'size':16}
-plt.rc('font',**font)
-
-
 def load_PAM_Params(fp = "PAMset.txt"):
     try:
         with open(fp, mode='r') as file:
@@ -52,6 +47,10 @@ class IPAMAnalyzer:
     
     def __init__(self):
         self.settings = dict()
+        font = {'family':'normal',
+                'size':16}
+        plt.rc('font',**font)
+
     
     def map_PAMSet(self,file_settings):
         keys = file_settings.keys()
@@ -110,6 +109,7 @@ class IPAMAnalyzer:
                         pass
             except:
                 print("SYD badly formatted")
+        
         if('histogram' in keys):
             try:
                 self.settings['create_Hists'] = bool(int(file_settings['histogram']))
@@ -179,6 +179,11 @@ class IPAMAnalyzer:
                 self.settings['cell_dist'] = int(file_settings['cell_distance'])
             except:
                 print("Cell distance badly formatted")
+        if('font_size' in keys):
+            try:
+                self.settings['font_size'] = int(file_settings['font_size'])
+            except:
+                print("Font size badly formatted")
         pprint.pprint(self.settings)
     
     def perform_analysis(self, fp,work_name, job_folder, batch = False, pamset=None):
@@ -223,21 +228,23 @@ class IPAMAnalyzer:
         self.settings['end_point']=-1
         self.settings['hist_end']=-1
         self.settings['filter_methods'] = {"SYD":0.3}
-        self.settings['filter_methods'].pop("SYD")
         self.settings['cell_mask_fp']=""
         self.settings['sorting_meth'] = "Static_Bins"
         self.settings['sorting_pos']=1
         self.settings['PlotAvg'] = False
         self.settings['cell_limit']=2000
         self.settings['cell_dist'] = -1
+        self.settings['font_size'] = 16
         #########################
         
-        file_settings = load_PAM_Params(pamset)
+        file_settings = load_PAM_Params(fp + "//" +pamset)
         if(len(file_settings) > 0):
             self.map_PAMSet(file_settings)
         
         
-            
+        font = {'family':'normal',
+                'size':self.settings['font_size']}
+        plt.rc('font',**font)
         
         
         self.outYields = dict()
@@ -444,14 +451,15 @@ class IPAMAnalyzer:
                 #unsorted_yields_start = np.concatenate((x[:,2+hist_start]))
                 unsorted_yields_start.extend(x[:,2+self.settings['hist_start']])
                 if(self.settings['hist_end'] != -1):            
-                    unsorted_yields_end = np.concatenate((unsorted_yields_end, x[:,2+self.settings['hist_end']-self.settings['start_point']]))
+                    #unsorted_yields_end = np.concatenate((unsorted_yields_end, x[:,2+self.settings['hist_end']-self.settings['start_point']]))
+                    unsorted_yields_end.extend(x[:,2+self.settings['hist_end']-self.settings['start_point']])
             #print(len(list(outYields.values())))
             #unsorted_Yields = np.concatenate((list(outYields.values())),axis=1)       
             self.hist_fig = self.plot_histograms(unsorted_yields_start,(self.settings['hist_start']-1)*self.settings['intervall'],"blue","//")
             if(self.settings['hist_end'] != -1):
                 self.plot_histograms(unsorted_yields_end,(self.settings['hist_end']-self.settings['start_point'])*self.settings['intervall'],"green","\\")
         
-            #hist_fig.legend(loc="upper right",bbox_to_anchor=(0.9,0.88))
+            self.hist_fig.legend(loc="upper right",bbox_to_anchor=(0.9,0.88))
             self.hist_fig.savefig(f"{self.output_folder}/{work_name}_Histogram", bbox_inches='tight')
         if(self.settings['create_Plots']):
            # avg_fig.legend(loc="upper center", ncol=2,bbox_to_anchor=(0.7,0.9))
@@ -464,8 +472,7 @@ class IPAMAnalyzer:
     def reanalyze(self,yields, indexes):
         #If you want to reanalyze only specific numbered cells.
         manFilteredYields = [part for part in yields if part[0] in indexes]
-        return manFilteredYields
-        
+        return manFilteredYields       
     
     def plot_values(self,yields, names, jobname, filename, subjob, rows = -1, columns = -1, mode = "Lines", floor = 0.2,legends=True, errorbars=True):
         #Assumes that yields is formatted as yields.shape = [n(subplots),n(samples),n(values)]
@@ -566,31 +573,23 @@ class IPAMAnalyzer:
             plt.minorticks_on()
             plt.grid(True, axis="y")
         
-        #if(not PlotAvg):
-            #lgd = fig2.legend(loc="lower left",ncol=2)
-            #box = ax.get_position()
-            #ax.set_position([box.x0, box.y0, box.width, box.height * 0.9])
-            #PlotAvg = True
-        #fig2.savefig(f"{output_dir}/{jobname}_Average_Yields", bbox_extra_artists=(lgd,), bbox_inches='tight')
-        #fig2.savefig(f"{output_dir}/{jobname}_Average_Yields", )
-        #fig2.legend(loc="upper left", ncol = 2)
-        #fig2.tight_layout()
-        
         self.figures[f"{jobname}_{subjob}_total_yields"] = fig 
         print(f"{jobname}: Average_Yield")
         self.figures[f"{jobname}: Average_Yield"] =  fig2
         
     def plot_histograms(self,yields,time_point=0, i_color = "red",hatch_char="/"):
         print(f"Creating histograms for {self.project_name}")
-        col_fig = plt.figure(f"{self.project_name }", figsize = [12,10])
+        col_fig = plt.figure(f"{self.project_name}", figsize = [12,10])
         plt.xlabel("$F_{V}$/$F_{m}$")
         plt.ylabel("Count")
         plt.minorticks_on()
+        plt.grid(visible = True,which='major',axis="y")
         #plt.axes().xaxis.set_tick_params(which='minor', right = 'off')
-        yield_bins=np.linspace(self.settings['floor'],0.7,num=(round((0.7-self.settings['floor'])/0.05)+1))
-        below = len([i for i in yields if i <= self.settings['floor']])
+        #yield_bins=np.linspace(self.settings['floor'],0.7,num=(round((0.7-self.settings['floor'])/0.05)+1))
+        #below = len([i for i in yields if i <= self.settings['floor']])
+        yield_bins=np.linspace(0,0.7,num=(round((0.7)/0.05)+1))
         yields = np.asarray(yields)
-        yields = yields[(yields>=self.settings['floor'])]
+        #yields = yields[(yields>=self.settings['floor'])]
         avg=np.mean(yields)
         arr = plt.hist(yields, bins=yield_bins, alpha=0.7, label = f"n: {len(yields)}. T: {time_point} mins. Mean: {avg:.3f}", edgecolor=i_color , align="mid", fill=False,orientation="vertical", hatch=hatch_char)
         plt.xticks(yield_bins,rotation=-45)
@@ -599,6 +598,7 @@ class IPAMAnalyzer:
         if(roof < plt.ylim()[1]):
             roof = plt.ylim()[1]
         plt.ylim(0,roof)
+        
         
         plt.axvline(avg,linestyle='dashed',color=i_color)
     
