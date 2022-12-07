@@ -457,12 +457,12 @@ class IPAMAnalyzer:
             #unsorted_Yields = np.concatenate((list(outYields.values())),axis=1)       
             self.hist_fig = self.plot_histograms(unsorted_yields_start,(self.settings['hist_start']-1)*self.settings['intervall'],"blue","//")
             if(self.settings['hist_end'] != -1):
-                self.plot_histograms(unsorted_yields_end,(self.settings['hist_end']-self.settings['start_point'])*self.settings['intervall'],"green","\\")
+                self.plot_histograms(unsorted_yields_end,(self.settings['hist_end']-self.settings['start_point'])*self.settings['intervall'],"green","\\\\")
         
-            self.hist_fig.legend(loc="upper right",bbox_to_anchor=(0.9,0.88))
+            self.hist_fig.legend(loc="upper right",bbox_to_anchor=(0.9,0.88),prop={'size':18})
             self.hist_fig.savefig(f"{self.output_folder}/{work_name}_Histogram", bbox_inches='tight')
         if(self.settings['create_Plots']):
-           # avg_fig.legend(loc="upper center", ncol=2,bbox_to_anchor=(0.7,0.9))
+            self.figures[f"{work_name}: Average_Yield"].legend(loc="upper center", ncol=2,bbox_to_anchor=(0.6,0.88), prop={'size':18})
             #avg_fig.legend()
             self.figures[f"{work_name}: Average_Yield"].savefig(f"{self.output_folder}/{work_name}_Average_Yields", )
         
@@ -526,7 +526,7 @@ class IPAMAnalyzer:
             ax = fig.add_subplot(rows,columns,Position[k])
             ax.set_title(names[k])
             ax.set_ylabel("$F_{V}$/$F_{m}$")
-            ax.set_xlabel("Minutes")
+            ax.set_xlabel("Time [Minutes]")
             ax.set_ylim(ylim)
             ax.set_xlim(xlim)
             subyields = [trim_yield[3:] for trim_yield in subyields]
@@ -574,14 +574,13 @@ class IPAMAnalyzer:
             plt.grid(True, axis="y")
         
         self.figures[f"{jobname}_{subjob}_total_yields"] = fig 
-        print(f"{jobname}: Average_Yield")
         self.figures[f"{jobname}: Average_Yield"] =  fig2
         
     def plot_histograms(self,yields,time_point=0, i_color = "red",hatch_char="/"):
         print(f"Creating histograms for {self.project_name}")
         col_fig = plt.figure(f"{self.project_name}", figsize = [12,10])
         plt.xlabel("$F_{V}$/$F_{m}$")
-        plt.ylabel("Count")
+        plt.ylabel("Count (cells)")
         plt.minorticks_on()
         plt.grid(visible = True,which='major',axis="y")
         #plt.axes().xaxis.set_tick_params(which='minor', right = 'off')
