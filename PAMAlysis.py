@@ -18,6 +18,7 @@ import math
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
+from matplotlib.ticker import (MultipleLocator, AutoMinorLocator)
 import cv2
 
 #CALL SIG:
@@ -182,6 +183,9 @@ class IPAMAnalyzer:
         if('font_size' in keys):
             try:
                 self.settings['font_size'] = int(file_settings['font_size'])
+                font = {'family':'normal',
+                        'size':self.settings['font_size']}
+                plt.rc('font',**font)
             except:
                 print("Font size badly formatted")
         pprint.pprint(self.settings)
@@ -227,7 +231,7 @@ class IPAMAnalyzer:
         self.settings['orig_end_point'] = -1
         self.settings['end_point']=-1
         self.settings['hist_end']=-1
-        self.settings['filter_methods'] = {"SYD":0.3}
+        self.settings['filter_methods'] = {"SYD":0.2}
         self.settings['cell_mask_fp']=""
         self.settings['sorting_meth'] = "Static_Bins"
         self.settings['sorting_pos']=1
@@ -259,9 +263,11 @@ class IPAMAnalyzer:
             if(len(tifs)==0):
                 print("No tif files found at provided filepath. Aborting")
                 sys.exit()
+            self.no_files = len(tifs)
         else:
             tifs = [fp]
             self.output_folder = "/".join(fp.split("/")[:-1])+"/Output/"+work_name
+            self.no_files = 1
         #Clean up output folder    
         try:
             os.makedirs(self.output_folder)
@@ -442,6 +448,7 @@ class IPAMAnalyzer:
                 self.plot_values(subs,names, work_name, fn,fovidx)
             #For outside use, return our filtered yields
             self.outYields[f"{fn}"] = sortedYields
+            
         if(self.settings['create_Hists']):
             unsorted_yields_start = []
             unsorted_yields_end = []
@@ -461,10 +468,12 @@ class IPAMAnalyzer:
         
             self.hist_fig.legend(loc="upper right",bbox_to_anchor=(0.9,0.88),prop={'size':18})
             self.hist_fig.savefig(f"{self.output_folder}/{work_name}_Histogram", bbox_inches='tight')
-        if(self.settings['create_Plots']):
-            self.figures[f"{work_name}: Average_Yield"].legend(loc="upper center", ncol=2,bbox_to_anchor=(0.6,0.88), prop={'size':18})
+        if(self.settings['create_Plots'] and self.settings['legends']):
+            #self.figures[f"{work_name}: Average_Yield"].legend(loc="lower right", ncol=2,bbox_to_anchor=(0.6,0.88), prop={'size':18})
+            self.figures[f"{work_name} Average FvFm"].legend(loc="lower left", bbox_to_anchor=(0.12,0.1),ncol=2, prop={'size':18})
+            #self.figures[f"{work_name}: Average_Yield"].legend(ncol=2, prop={'size':18})
             #avg_fig.legend()
-            self.figures[f"{work_name}: Average_Yield"].savefig(f"{self.output_folder}/{work_name}_Average_Yields", )
+            self.figures[f"{work_name} Average FvFm"].savefig(f"{self.output_folder}/{work_name}_Average FvFm", )
         
         PlotAvg = False
         return self.outYields, self.figures, self.hist_fig
@@ -510,8 +519,10 @@ class IPAMAnalyzer:
         if(xlim[1] <= 100):
             xstep = 10
         else:
-            #xstep = round((xlim[1]/100)+1)*10
-            xstep=100
+            xstep = round((xlim[1]/100)+1)*10
+            if(xstep < 120 and xstep > 80):
+                xstep=100
+            #xstep=100
         ylim = [0,0.7] 
         Position = range(1,tot + 1)
         #fig = plt.figure(figsize=(5*rows, 3*columns))
@@ -541,7 +552,8 @@ class IPAMAnalyzer:
                 ax.plot(range(xlim[0],xlim[1],self.settings['intervall']),part, marker='o', markersize = 3, linewidth = 0.5, color=cmap(norm(part[-1])))
             plt.yticks(np.arange(ylim[0], ylim[1], 0.1), labels=None)
             plt.xticks(np.arange(0,xlim[1],step=xstep))
-            #ax.plot(range(xlim[0],xlim[1],intervall),avg_line, marker='o', markersize = 3, linewidth = 6,linestyle='dashed',color="black")
+            ax.xaxis.set_major_locator(MultipleLocator(xstep))
+            ax.xaxis.set_minor_locator(MultipleLocator(xstep/5))
             plt.minorticks_on()
             plt.grid(axis="y")
     
@@ -549,38 +561,47 @@ class IPAMAnalyzer:
         fig.savefig(fname =f"{self.output_folder}/{jobname}_{subjob}_total_yields")
         
         
-        cmap = plt.cm.get_cmap("turbo_r")
-        norm = mcolors.Normalize(vmin=ylim[0]+0.2,vmax=0.5)
-        fig2 = plt.figure(f"{jobname}: Average_Yield",figsize = [12,10])
+        cmap = plt.cm.get_cmap("viridis")
+        #norm = mcolors.Normalize(vmin=ylim[0]+0.2,vmax=0.5)
+        norm = mcolors.Normalize(vmin=0,vmax=self.no_files-1)
+        fig2 = plt.figure(f"{jobname} Average FvFm",figsize = [12,10])
         #fig2.suptitle(f"{jobname}: Average "+"$F_{V}$/$F_{m}$.")
         ax = plt.subplot(111)
-        for idx, avgs in enumerate(avg_lines):
+        plt.ylabel("$F_{V}$/$F_{m}$")
+        plt.xlabel("Time [Minutes]")
+        plt.xlim(xlim)
+        plt.ylim(ylim)
+        plt.yticks(np.arange(ylim[0], ylim[1], step=(ylim[1]-ylim[0])/7), labels=None)
+        plt.xticks(np.arange(0,xlim[1],step=xstep))
+        plt.minorticks_on()
+        
+        ax.xaxis.set_major_locator(MultipleLocator(xstep))
+        ax.xaxis.set_minor_locator(MultipleLocator(xstep/5))
+        plt.grid(True, axis="y")
+        lw = 3
+        msize = 4
+        elw = 2
+        opac = 0.75
+        for idx, avgs in enumerate(avg_lines):            
             if(legends and errorbars):
-                ax.errorbar(range(xlim[0],xlim[1],self.settings['intervall']),avgs, yerr = avg_errors[idx], color = cmap(norm(avgs[-1])), label = f"{filename}, " + f"n(cells)= {str().join([s for s in names[idx][3:12] if s.isdigit()])}", markersize = 3, marker='o',linewidth = 2, capsize = 2, elinewidth = 1, errorevery =(1,5))
+                ax.errorbar(range(xlim[0],xlim[1],self.settings['intervall']),avgs, yerr = avg_errors[idx], color = cmap(norm(subjob)), label = f"{filename}, " + f"n(cells)= {str().join([s for s in names[idx][3:12] if s.isdigit()])}", markersize = msize, marker='o',linewidth = lw, capsize = 2, elinewidth = elw, errorevery =(1+subjob,self.no_files), alpha = opac)
             elif(errorbars):
-                ax.errorbar(range(xlim[0],xlim[1],self.settings['intervall']),avgs, yerr = avg_errors[idx], color = cmap(norm(avgs[-1])), markersize = 3, marker='o',linewidth = 2, capsize = 2, elinewidth = 1, errorevery =(1,5))
+                ax.errorbar(range(xlim[0],xlim[1],self.settings['intervall']),avgs, yerr = avg_errors[idx], color = cmap(norm(subjob)), markersize = msize, marker='o',linewidth = lw, capsize = 2, elinewidth = elw, errorevery =(1+subjob,self.no_files), alpha = opac)
             elif(legends):
-                ax.plot(range(xlim[0],xlim[1],self.settings['intervall']),avgs, color = cmap(norm(avgs[-1])), label = f"{filename}, " + f"n(cells)= {str().join([s for s in names[idx][3:12] if s.isdigit()])}", markersize = 3, marker='o',linewidth =2)
+                ax.plot(range(xlim[0],xlim[1],self.settings['intervall']),avgs, color = cmap(norm(avgs[-1])), label = f"{filename}, " + f"n(cells)= {str().join([s for s in names[idx][3:12] if s.isdigit()])}", markersize = msize, marker='o',linewidth =lw, alpha = opac)
             else:
-                ax.plot(range(xlim[0],xlim[1],self.settings['intervall']),avgs, color = cmap(norm(avgs[-1])), markersize = 3, marker='o',linewidth = 2)
+                ax.plot(range(xlim[0],xlim[1],self.settings['intervall']),avgs, color = cmap(norm(avgs[-1])), markersize = msize, marker='o',linewidth = lw,alpha = opac)
             
-            plt.ylabel("$F_{V}$/$F_{m}$")
-            plt.xlabel("Minutes")
-            plt.xlim(xlim)
-            plt.ylim(ylim)
-            plt.yticks(np.arange(ylim[0], ylim[1], step=(ylim[1]-ylim[0])/7), labels=None)
-            plt.xticks(np.arange(0,xlim[1],step=xstep))
-            plt.minorticks_on()
-            plt.grid(True, axis="y")
+        
         
         self.figures[f"{jobname}_{subjob}_total_yields"] = fig 
-        self.figures[f"{jobname}: Average_Yield"] =  fig2
+        self.figures[f"{jobname} Average FvFm"] =  fig2
         
     def plot_histograms(self,yields,time_point=0, i_color = "red",hatch_char="/"):
         print(f"Creating histograms for {self.project_name}")
         col_fig = plt.figure(f"{self.project_name}", figsize = [12,10])
         plt.xlabel("$F_{V}$/$F_{m}$")
-        plt.ylabel("Count (cells)")
+        plt.ylabel("Count [cells]")
         plt.minorticks_on()
         plt.grid(visible = True,which='major',axis="y")
         #plt.axes().xaxis.set_tick_params(which='minor', right = 'off')
