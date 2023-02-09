@@ -1,0 +1,20 @@
+[Analysis Settings]
+AOI_Mode=Ft_Masks
+minsize=6
+maxsize=46
+floor=0.2
+subpop_size=1
+border=50
+SYD=1
+[Time settings]
+start_point=1
+intervall=5
+[Graphical & Plotting Settings]
+histogram=1
+hist_start=1
+hist_end=10
+Plots=1
+legends=1
+errorbars=1
+sorting_method=Static_Bins
+font_size=32
