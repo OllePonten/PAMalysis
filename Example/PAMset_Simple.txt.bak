@@ -1,0 +1,15 @@
+[Analysis Settings]
+AOI_Mode=Ft_Masks
+minsize=4
+maxsize=40
+floor=0.1
+subpop_size=1
+border=25
+end_point=-1
+SYD=1
+[Time settings]
+start_point=1
+intervall=5
+[Graphical & Plotting Settings]
+Plots=1
+sorting_method=Static Bins
