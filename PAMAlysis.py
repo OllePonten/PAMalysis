@@ -252,7 +252,7 @@ class PAMalysis:
         self.settings['hist_end'] = -1
         self.settings['filter_methods'] = {"SYD": 0.2}
         self.settings['cell_mask_fp'] = ""
-        self.settings['sorting_meth'] = "Static_Bins"
+        self.settings['sorting_meth'] = "Static Bins"
         self.settings['sorting_pos'] = 1
         self.settings['PlotAvg'] = False
         self.settings['cell_limit'] = 2000
@@ -424,7 +424,6 @@ class PAMalysis:
             meanYields = np.zeros(shape=(len(filt_cnts), len(yields)+3))
             numberedMask = cv2.resize(
                 filteredMask, (filteredMask.shape[1] * 2, filteredMask.shape[0] * 2), interpolation=cv2.INTER_CUBIC)
-            import ipdb
             for cellidx, cnt in enumerate(filt_cnts):
                 # Get minimum bounding rect
                 rect = cv2.boundingRect(cnt)
@@ -751,7 +750,6 @@ class PAMalysis:
         cps = []
         radii = []
         discardlist = []
-        import ipdb
         if(self.settings['cell_dist'] > 0):
             for idx, cnt in enumerate(filtered_cnts):
                 (x, y), radius = cv2.minEnclosingCircle(cnt)
