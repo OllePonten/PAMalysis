@@ -17,6 +17,8 @@ import pprint
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
+from matplotlib.ticker import AutoMinorLocator
+from matplotlib.ticker import MultipleLocator
 import cv2
 
 # CALL SIG:
@@ -28,6 +30,9 @@ global filenames, DEBUG, YIELD_FILTER_SETTING
 # Yield filter averages out any Yield pixel by the average within a kernel of k*k, k=YIELD_FILTER_SETTING
 YIELD_FILTER_SETTING = 0
 DEBUG = False
+
+if (DEBUG):
+    import ipdb
 
 
 def load_PAM_Params(fp="PAMset.txt"):
@@ -252,7 +257,7 @@ class PAMalysis:
         self.settings['hist_end'] = -1
         self.settings['filter_methods'] = {"SYD": 0.2}
         self.settings['cell_mask_fp'] = ""
-        self.settings['sorting_meth'] = "Static_Bins"
+        self.settings['sorting_meth'] = "Static Bins"
         self.settings['sorting_pos'] = 1
         self.settings['PlotAvg'] = False
         self.settings['cell_limit'] = 2000
@@ -338,9 +343,9 @@ class PAMalysis:
             else:
                 tif = tif[0:2]
             tif_tags = {}
-            # Get all tags
             globalx = 0
             globaly = 0
+            # Get all tags
             with tifffile.TiffFile(current_tif) as tif_file:
                 for tag in tif_file.pages[0].tags.values():
                     name, value = tag.name, tag.value
@@ -424,7 +429,6 @@ class PAMalysis:
             meanYields = np.zeros(shape=(len(filt_cnts), len(yields)+3))
             numberedMask = cv2.resize(
                 filteredMask, (filteredMask.shape[1] * 2, filteredMask.shape[0] * 2), interpolation=cv2.INTER_CUBIC)
-            import ipdb
             for cellidx, cnt in enumerate(filt_cnts):
                 # Get minimum bounding rect
                 rect = cv2.boundingRect(cnt)
@@ -495,6 +499,7 @@ class PAMalysis:
                         list(self.settings.items()) + [str(datetime.date.today())])
                     tot_yield_writer.writerow(times)
                 with open(f'{self.output_folder}/' + work_name + '_' + fn + '.csv', mode='w', newline="") as pos_file:
+                    print(f"Writing CSV to: {pos_file.name}")
                     yield_writer = csv.writer(
                         pos_file, delimiter=",", quotechar='"', quoting=csv.QUOTE_MINIMAL)
                     yield_writer.writerow(fn)
@@ -503,10 +508,12 @@ class PAMalysis:
                     for idx, part in enumerate(sortedYields):
                         yield_writer.writerow(part)
                         tot_yield_writer.writerow(part)
+                        
             if(self.settings['create_Plots']):
                 try:
                     self.plot_values(subs, names, work_name, fn, fovidx)
-                except:
+                except Exception as e:
+                    print(e)
                     print("Could not plot values.")
                     pass
             # For outside use, return our filtered yields
@@ -718,42 +725,14 @@ class PAMalysis:
 
         """
 
-        # Remove all contours below a given size
-        filtered_cnts = []
-        # Filter based on size and being outside of border
-        cent_dist = []
-        for cnt in cnts:
-            mu = cv2.moments(cnt)
-            if(mu['m00'] > self.settings['minsize'] and mu['m00'] < self.settings['maxsize']):
-                x, y, w, h = cv2.boundingRect(cnt)
-                maxY = self.imgheight-self.settings['border']
-                maxX = self.imgwidth-self.settings['border']*2
-                minX = self.settings['border']*2
-                minY = self.settings['border']
-                if(x+self.settings['border']*2 > minX and x+w+self.settings['border']*2 < maxX and y+self.settings['border'] > minY and y+h+self.settings['border'] < maxY):
-                    filtered_cnts.append(cnt)
-                    cntX = (x+w/2)-((maxX-minX)/2)
-                    cntY = (y+h/2)-((maxY-minY)/2)
-                    cent_dist.append(np.linalg.norm([cntX, cntY]))
-        print(
-            f"Contours remaining after filtering with size thresholds: {self.settings['minsize']}-{self.settings['maxsize']} pixels are {len(filtered_cnts)}")
-
-        # Filter if there are too many contours
-        while(len(filtered_cnts) > self.settings['cell_limit']):
-            rmdist = max(cent_dist)
-            ind = cent_dist.index(max(cent_dist))
-            cent_dist.pop(ind)
-            filtered_cnts.pop(ind)
-            if(self.settings['verbosity'] >= 2):
-                print(
-                    f"Removed contours with {rmdist} from center. {len(filtered_cnts)} contours remaining. Limit: {self.settings['cell_limit']}")
-
+        # Filter based on proximity between cells
+        dist_filtered_cnts = []
         cps = []
         radii = []
         discardlist = []
         import ipdb
         if(self.settings['cell_dist'] > 0):
-            for idx, cnt in enumerate(filtered_cnts):
+            for idx, cnt in enumerate(cnts):
                 (x, y), radius = cv2.minEnclosingCircle(cnt)
                 cps.append([int(x), int(y),idx])
             for idx in range(len(cps)):
@@ -764,14 +743,45 @@ class PAMalysis:
                             (cps[idx][0]-cps[jdx][0])**2 + (cps[idx][1]-cps[jdx][1])**2)
                         if (cpdist <= self.settings['cell_dist']):
                             # Discard
-                            print(f"{cpdist}. {idx}:{cps[idx]} , {jdx}:{cps[jdx]}")
-                            discardlist.append(cps[idx][2])
-            discardlist = list(set(discardlist))
-            try:
-                filtered_cnts = np.delete(filtered_cnts,discardlist)
-            except:
-                pass
-        return filtered_cnts
+                            #print(f"{cpdist}. {idx}:{cps[idx]} , {jdx}:{cps[jdx]}")
+                            discardlist.append(idx)
+            print(f"Removing {len(discardlist)} contours due to proximity.")
+            dist_filtered_cnts = [i for j, i in enumerate(cnts) if j not in frozenset(discardlist)]
+        else:
+            dist_filtered_cnts = cnts
+        
+        
+        size_filtered_cnts=[]
+        # Filter based on size and being outside of border
+        cent_dist = []
+        for cnt in dist_filtered_cnts:
+            mu = cv2.moments(cnt)
+            if(mu['m00'] > self.settings['minsize'] and mu['m00'] < self.settings['maxsize']):
+                x, y, w, h = cv2.boundingRect(cnt)
+                maxY = self.imgheight-self.settings['border']
+                maxX = self.imgwidth-self.settings['border']*2
+                minX = self.settings['border']*2
+                minY = self.settings['border']
+                if(x+self.settings['border']*2 > minX and x+w+self.settings['border']*2 < maxX and y+self.settings['border'] > minY and y+h+self.settings['border'] < maxY):
+                    size_filtered_cnts.append(cnt)
+                    cntX = (x+w/2)-((maxX-minX)/2)
+                    cntY = (y+h/2)-((maxY-minY)/2)
+                    cent_dist.append(np.linalg.norm([cntX, cntY]))
+
+        print(
+            f"Contours remaining after filtering with size thresholds: {self.settings['minsize']}-{self.settings['maxsize']} pixels are {len(size_filtered_cnts)}")
+        # Filter if there are too many contours
+        while(len(size_filtered_cnts) > self.settings['cell_limit']):
+            rmdist = max(cent_dist)
+            ind = cent_dist.index(max(cent_dist))
+            cent_dist.pop(ind)
+            size_filtered_cnts.pop(ind)
+            if(self.settings['verbosity'] >= 2):
+                print(
+                    f"Removed contours with {rmdist} from center. {len(size_filtered_cnts)} contours remaining. Limit: {self.settings['cell_limit']}")
+
+        
+        return size_filtered_cnts
 
     def filter_yields(self, cellyields, meths, floor=0):
         SYD = False
@@ -854,7 +864,13 @@ class PAMalysis:
                 names.append(
                     f"n:{len(subpops[idx])} Quantile: {idx*threshold_size:.2f}-{(idx+1)*threshold_size:.2f}")
             subpops = np.asarray(subpops)
+        elif(self.settings['sorting_meth'] == "None"):
+            print("No sorting requested")
+            names.append(f"{self.project_name}")
+            subpops = cellyields
+            sortedYields = cellyields
         else:
+            print(self.settings['sorting_meth'])
             raise NameError("Sorting method is not valid.")
         if(len(sortedYields)==0):
             print("Could not sort cell values. Returning unsorted.")
@@ -882,15 +898,15 @@ def make_yield_images(img_stack):
     # Remove s&p noise
     Mask = np.where(Fm[0] >= int(0.048*255), 1, 0)
     Mask = Mask.astype(np.uint8)
-    Mask = cv2.medianBlur(Mask,3)
-    Mask = np.where(Mask>0,1,0)
+    #Mask = cv2.medianBlur(Mask,3)
+    #Mask = np.where(Mask>0,1,0)
     for i in range(len(Fo)):   
         Fv = np.subtract(Fm[i], Fo[i], dtype=np.float64)
         # Floor to zero
         Fv = np.clip(Fv, 0, 255)
         Fv = np.multiply(Fv, Mask)
         cYield = np.divide(Fv.astype(np.float32), Fm[i].astype(np.float32), out=np.zeros_like(
-            Fv, dtype=np.float32), where=(np.logical_and(Fm[i] >= 4,Fo[i]>=1) ))
+            Fv, dtype=np.float32), where=(np.logical_and(Fm[i] >= 3,Fo[i]>=1) ))
 
         Yield.append(cYield)
     return np.asarray(Yield)
