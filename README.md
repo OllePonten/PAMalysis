@@ -22,6 +22,7 @@ PAMalysis calculates the Fv/Fm image from a stack of F/Fm images and segments ou
 
 > -b : Batch mode. If provided -FilePath should be a folder. All tif files in that folder will be analyzed
 
+> -i : interactive mode. BETA FEATURE. PAMalysis will interactively ask the user what files to use.
 # How to run
 PAMalysis is run as directly from the shell or via IPython or the Jupyter interactive shell. A typical run signature from cmd could look as follows:
 
