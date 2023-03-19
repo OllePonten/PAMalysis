@@ -5,10 +5,8 @@ Created on Fri May 7 13:36:59 2021
 Software for analysing tiff image stacks created by pacman
 @author: Olle
 """
-import sys
-import datetime
+import sys, datetime, os, configparser
 import tifffile
-import os
 import csv
 import warnings
 import argparse
@@ -25,10 +23,8 @@ import cv2
 #runfile('C:/Users/ollpo511/Documents/GitHub/PAMalysis/PAMAlysis.py', wdir='C:Users/ollpo511/Documents', args = '{Project_Name} {PAMSet filename}')
 
 
-global filenames, DEBUG, YIELD_FILTER_SETTING
-# YIELD_FILTER_SETTING corresponds to the Settings in ImagingWin. NOTE: RESULTS CAN BE HIGHLY IMPACTED BY THIS SETTING.
-# Yield filter averages out any Yield pixel by the average within a kernel of k*k, k=YIELD_FILTER_SETTING
-YIELD_FILTER_SETTING = 0
+global filenames, DEBUG
+
 DEBUG = False
 
 if (DEBUG):
@@ -61,18 +57,54 @@ class PAMalysis:
                 'size': 18}
         plt.rc('font', **font)
 
+    def alt_PAMset(file_path):
+        if not os.path.isfile(file_path):
+            raise FileNotFoundError(f"The file {file_path} was not found.")
+        config = configparser.ConfigParser()
+        config.read(file_path)
+        ini_dict = {}
+        for section in config.sections():
+            section_dict = {}
+            for key, value in config.items(section):
+                if value.lower() == 'true':
+                    section_dict[key] = True
+                elif value.lower() == 'false':
+                    section_dict[key] = False
+                else:
+                    section_dict[key] = value
+            ini_dict[section] = section_dict
+        return ini_dict
+
+        
+
     def map_PAMSet(self, file_settings):
+        """
+        Maps keywords and their values to parameter names in PAMalysis in th PAMalysis.setttings dict.
+
+        Parameters
+        ----------
+        file_settings : Dictionary
+            Dictionary originating from PAMset file.
+
+        Returns
+        -------
+        None.
+
+        """
+        #So that people can use whatever capitalization in PAMset
+        file_settings = {k.lower(): v for k, v in file_settings.items()}
         keys = file_settings.keys()
+        print(f"Found settings for: {keys}. Mapping.")
         if('minsize' in keys):
             try:
-                self.settings['minsize'] = int(file_settings['minsize'])
+                self.settings['Minsize'] = int(file_settings['minsize'])
             except:
                 print("Minsize badly formatted")
         if('maxsize' in keys):
             try:
-                self.settings['maxsize'] = int(file_settings['maxsize'])
+                self.settings['Maxsize'] = int(file_settings['maxsize'])
             except:
-                print("maxsize badly formatted")
+                print("Maxsize badly formatted")
         if('floor' in keys):
             try:
                 self.settings['floor'] = float(file_settings['floor'])
@@ -98,22 +130,28 @@ class PAMalysis:
                 print("Unknown sorting ")
         if('border' in keys):
             try:
-                self.settings['border'] = int(file_settings['border'])
+                self.settings['Border'] = int(file_settings['border'])
             except:
                 print("border badly formatted")
         if('threshold' in keys):
             try:
-                self.settings['threshold'] = float(file_settings['threshold'])
+                self.settings['Threshold'] = float(file_settings['threshold'])
             except:
                 print("Threshold badly formatted")
         if('intervall' in keys):
             try:
-                self.settings['intervall'] = int(file_settings['intervall'])
+                self.settings['Intervall'] = int(file_settings['intervall'])
             except:
                 print("Intervall badly formatted")
-        if('SYD' in keys):
+        if('position_intervalll' in keys):
             try:
-                self.settings['SYD'] = bool(int(file_settings['SYD']))
+                self.settings['Position_Intervalll'] = int(file_settings['position_intervalll'])
+            except:
+                print("Position Intervall badly formatted")
+        if('syd' in keys):
+            try:
+                self.settings['SYD'] = bool(int(file_settings['syd']))
+                print(self.settings['SYD'])
                 if(self.settings['SYD'] == False):
                     try:
                         self.settings['filter_methods'].pop("SYD")
@@ -121,29 +159,33 @@ class PAMalysis:
                         pass
             except:
                 print("SYD badly formatted")
-
+        if('outline' in keys):
+            try:
+                self.settings['outline'] = int(file_settings['outline'])
+            except:
+                print("Outline thickness badly formatted")
+                pass
         if('histogram' in keys):
             try:
-                self.settings['create_Hists'] = bool(
-                    int(file_settings['histogram']))
+                self.settings['create_Hists'] = bool(int(file_settings['histogram']))
             except:
                 print("Histogram badly formatted")
                 pass
-        if('hist_end' in keys):
+        if('histogram_end' in keys):
             try:
-                self.settings['hist_end'] = int(file_settings['hist_end'])
+                self.settings['Histogram_end'] = int(file_settings['histogram_end'])
             except:
                 print("hist_end point badly formatted")
                 pass
-        if('hist_start' in keys):
+        if('histogram_start' in keys):
             try:
-                self.settings['hist_start'] = int(file_settings['hist_start'])
+                self.settings['Histogram_start'] = int(file_settings['histogram_start'])
             except:
-                print("Hist end point badly formatted")
+                print("Hist start point badly formatted")
         if('plots' in keys):
             try:
                 self.settings['create_Plots'] = bool(
-                    int(file_settings['Plots']))
+                    int(file_settings['plots']))
             except:
                 print("Plots badly formatted")
                 pass
@@ -238,23 +280,23 @@ class PAMalysis:
         tifs = []
         #### DEFAULT SETTINGS ####
         self.settings['AOI_mode'] = "Ft_Masks"
-        self.settings['border'] = 50
-        self.settings['intervall'] = 5
-        self.settings['minsize'] = 5
-        self.settings['maxsize'] = 60
+        self.settings['Border'] = 50
+        self.settings['Intervall'] = 5
+        self.settings['Minsize'] = 5
+        self.settings['Maxsize'] = 60
         self.settings['subpopthreshold_size'] = 1
-        self.settings['floor'] = 0.05
-        self.settings['threshold'] = 0.048
+        self.settings['Floor'] = 0.05
+        self.settings['Threshold'] = 0.048
         self.settings['create_Hists'] = False
         self.settings['create_Plots'] = True
         self.settings['globalcoordinates'] = False
-        self.settings['hist_start'] = 1
         self.settings['start_point'] = 0
         self.settings['legends'] = True
         self.settings['errorbars'] = True
         self.settings['orig_end_point'] = -1
         self.settings['end_point'] = -1
-        self.settings['hist_end'] = -1
+        self.settings['Histogram_start'] = 1
+        self.settings['Histogram_end'] = -1
         self.settings['filter_methods'] = {"SYD": 0.2}
         self.settings['cell_mask_fp'] = ""
         self.settings['sorting_meth'] = "Static Bins"
@@ -265,6 +307,7 @@ class PAMalysis:
         self.settings['font_size'] = 16
         self.settings['show_cell_mask'] = False
         self.settings['verbosity'] = 1
+        self.settings['outline']=1
         #########################
         fp_PAMset = None
         if(batch):
@@ -373,9 +416,9 @@ class PAMalysis:
                             globaly = int(desc[yposind:])
             self.imgwidth = 640
             self.imgheight = 480
-            if(self.settings['border'] > 0):
-                yields = [frame[self.settings['border']:self.imgheight-self.settings['border'],
-                                self.settings['border']*2:self.imgwidth-self.settings['border']*2]for frame in tif]
+            if(self.settings['Border'] > 0):
+                yields = [frame[self.settings['Border']:self.imgheight-self.settings['Border'],
+                                self.settings['Border']*2:self.imgwidth-self.settings['Border']*2]for frame in tif]
                 yields = make_yield_images(yields)
             else:
                 yields = make_yield_images(tif)
@@ -387,10 +430,10 @@ class PAMalysis:
                              f"Yields_{work_name}_{fn}.tif", data=yields_for_img)
             mask = 0
             if("Projection" in self.settings['AOI_mode']):
-                mask = create_Masks(yields, self.settings['threshold'])
+                mask = create_Masks(yields, self.settings['Threshold'])
             elif("Ft_Masks" in self.settings['AOI_mode']):
-                mask = create_Masks_Ft([frame[self.settings['border']:self.imgheight-self.settings['border'], self.settings['border']
-                                       * 2:self.imgwidth-self.settings['border']*2]for frame in tif], self.settings['threshold'])
+                mask = create_Masks_Ft([frame[self.settings['Border']:self.imgheight-self.settings['Border'], self.settings['Border']
+                                       * 2:self.imgwidth-self.settings['Border']*2]for frame in tif], self.settings['Threshold'])
                 #yields = np.multiply(yields,mask)
             elif("Cell_mask" in self.settings['AOI_mode']):
                 print(
@@ -407,24 +450,29 @@ class PAMalysis:
             cnts, hrs = cv2.findContours(
                 mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
             contimg = cv2.cvtColor(np.zeros_like(mask), cv2.COLOR_GRAY2BGR)
+            
             drawn = cv2.drawContours(contimg, cnts, -1, (0, 0, 255), -1)
             if(DEBUG):
                 cv2.imshow("Conts", drawn)
             print(f"Raw contours found: {len(cnts)}")
-
             filt_cnts = self.filter_conts(cnts)
-
             print(f"Contour list pruned to {len(filt_cnts)}")
+            
             
             # Draw a filtered mask
             filteredMask = cv2.drawContours(cv2.cvtColor(np.zeros_like(
                 mask, dtype=np.uint8), cv2.COLOR_GRAY2BGR), filt_cnts, -1, (255, 255, 255), -1)
+            #Draw thicker outlines to accomodate "wiggling" cells, controlled by PAMset: outline=
+            if(self.settings['outline']>1):
+                filteredMask = cv2.drawContours(filteredMask, filt_cnts, -1,(255,255,255),self.settings['outline'])
             #filteredMask = cv2.drawContours(filteredMask, filt_cnts, -1, (255, 255, 255), 2)
             cell_mask_out = cv2.cvtColor(filteredMask, cv2.COLOR_BGR2GRAY)
             tifffile.imwrite(f'{self.output_folder}/' + work_name +
                              '_' + fn + "cell_mask.tif", cell_mask_out)
             if(DEBUG):
                 cv2.imshow("Filtered conts", filteredMask)
+                
+                
             # Output table
             meanYields = np.zeros(shape=(len(filt_cnts), len(yields)+3))
             numberedMask = cv2.resize(
@@ -433,11 +481,11 @@ class PAMalysis:
                 # Get minimum bounding rect
                 rect = cv2.boundingRect(cnt)
                 if(self.settings['globalcoordinates']):
-                    cellcenter = [self.settings['border'] + globalx+int(
-                        (rect[0]+rect[2])/2)*4, self.settings['border']*2 + globaly+int((rect[1]+rect[3])/2)*4]
+                    cellcenter = [self.settings['Border'] + globalx+int(
+                        (rect[0]+rect[2])/2)*4, self.settings['Border']*2 + globaly+int((rect[1]+rect[3])/2)*4]
                 else:
-                    cellcenter = [self.settings['border'] + int(
-                        (rect[0]+rect[2])/2)*4, self.settings['border']*2 + int((rect[1]+rect[3])/2)*4]
+                    cellcenter = [self.settings['Border'] + int(
+                        (rect[0]+rect[2])/2)*4, self.settings['Border']*2 + int((rect[1]+rect[3])/2)*4]
                 cellMinis = yields[:, rect[1]:rect[1]+rect[3], rect[0]:rect[0]+rect[2]]
                 mini_mask = cell_mask_out[rect[1]:rect[1]+rect[3], rect[0]:rect[0]+rect[2]]
                 cellMinis=cellMinis[:]*(mini_mask//255)
@@ -473,7 +521,7 @@ class PAMalysis:
             
             # THRESHOLD FILTER
             filteredYields = self.filter_yields(
-                meanYields[:, :], self.settings['filter_methods'], self.settings['floor'])
+                meanYields[:, :], self.settings['filter_methods'], self.settings['Floor'])
             print(f"Yields remaining after filter: {len(filteredYields)}")
 
             if(self.settings['show_cell_mask'] or DEBUG):
@@ -487,13 +535,13 @@ class PAMalysis:
             if(DEBUG):
                 cv2.imshow("Numbered masks", numberedMask)
             subs, names, sortedYields = self.subdivide_yield(
-                filteredYields, threshold_size=self.settings['subpopthreshold_size'], floor=self.settings['floor'])
+                filteredYields, threshold_size=self.settings['subpopthreshold_size'], floor=self.settings['Floor'])
             
             with open(f'{self.output_folder}/' + work_name+'AllYields.csv', mode='a', newline="") as tot_file:
                 tot_yield_writer = csv.writer(
                     tot_file, delimiter=",", quotechar='"', quoting=csv.QUOTE_MINIMAL)
                 times = ["Index", "XPosition", "YPosition"] + list(range(0, len(
-                    sortedYields[0]-3)*(self.settings['intervall']), self.settings['intervall']))
+                    sortedYields[0]-3)*(self.settings['Intervall']), self.settings['Intervall']))
                 if(fovidx == 0):
                     tot_yield_writer.writerow(
                         list(self.settings.items()) + [str(datetime.date.today())])
@@ -527,29 +575,24 @@ class PAMalysis:
                 x = np.asarray(x)
                 #unsorted_yields_start = np.concatenate((x[:,2+hist_start]))
                 unsorted_yields_start.extend(
-                    x[:, 2+self.settings['hist_start']])
-                if(self.settings['hist_end'] != -1):
+                    x[:, 2+self.settings['Histogram_start']])
+                if(self.settings['Histogram_end'] != -1):
                     #unsorted_yields_end = np.concatenate((unsorted_yields_end, x[:,2+self.settings['hist_end']-self.settings['start_point']]))
                     unsorted_yields_end.extend(
-                        x[:, 2+self.settings['hist_end']-self.settings['start_point']])
+                        x[:, 2+self.settings['Histogram_end']-self.settings['start_point']])
             # print(len(list(outYields.values())))
             #unsorted_Yields = np.concatenate((list(outYields.values())),axis=1)
             self.hist_fig = self.plot_histograms(
-                unsorted_yields_start, (self.settings['hist_start']-1)*self.settings['intervall'], "blue", "//")
-            if(self.settings['hist_end'] != -1):
+                unsorted_yields_start, (self.settings['Histogram_start']-1)*self.settings['Intervall'], "blue", "//")
+            if(self.settings['Histogram_end'] != -1):
                 self.plot_histograms(unsorted_yields_end, (
-                    self.settings['hist_end']-self.settings['start_point'])*self.settings['intervall'], "green", "\\\\")
+                    self.settings['Histogram_end']-self.settings['start_point'])*self.settings['Intervall'], "green", "\\\\")
 
-            self.hist_fig.legend(loc="upper right", bbox_to_anchor=(
-                0.9, 0.88), prop={'size': 18})
-            self.hist_fig.savefig(
-                f"{self.output_folder}/{work_name}_Histogram", bbox_inches='tight')
+            self.hist_fig.legend(loc="upper right", bbox_to_anchor=(0.9, 0.88), prop={'size': 18})
+            self.hist_fig.savefig(f"{self.output_folder}/{work_name}_Histogram", bbox_inches='tight')
         if(self.settings['create_Plots'] and self.settings['legends']):
-            #self.figures[f"{work_name}: Average_Yield"].legend(loc="lower right", ncol=2,bbox_to_anchor=(0.6,0.88), prop={'size':18})
             self.figures[f"{work_name} Average FvFm"].legend(
                 loc="lower left", bbox_to_anchor=(0.12, 0.1), ncol=2, prop={'size': 18})
-            #self.figures[f"{work_name}: Average_Yield"].legend(ncol=2, prop={'size':18})
-            # avg_fig.legend()
             self.figures[f"{work_name} Average FvFm"].savefig(
                 f"{self.output_folder}/{work_name}_Average FvFm", )
 
@@ -571,11 +614,9 @@ class PAMalysis:
         base = 3
         tot = len(names)
         if(tot == 1):
-            # Only one dataset.
             columns = 1
             rows = 1
         else:
-            # if(rows == -1 or columns == -1):
             columns = 1
             if(tot % 2 == 0):
                 columns = int(tot/2)
@@ -588,23 +629,19 @@ class PAMalysis:
         avg_sizes = []
         xlim = [0, 0]
         xstep = 0
+       
+        
+        xlim = [0, round((len(yields[0][0])-base) *
+                         self.settings['Intervall'])]
 
-        try:
-            xlim = [0, round((len(yields[0][0])-base) *
-                             self.settings['intervall'])]
-        except:
-            print("Population empty, could not plot values. ")
-            return
         if(xlim[1] <= 100):
             xstep = 10
         else:
             xstep = round((xlim[1]/100)+1)*10
             if(xstep < 120 and xstep > 80):
                 xstep = 100
-            # xstep=100
         ylim = [0, 0.7]
         Position = range(1, tot + 1)
-        #fig = plt.figure(figsize=(5*rows, 3*columns))
         plt.close(f"{jobname}: Subpopulations")
         fig = plt.figure(f"{filename} Subpopulations",
                          figsize=(12*columns, 10*rows))
@@ -617,7 +654,7 @@ class PAMalysis:
             ax = fig.add_subplot(rows, columns, Position[k])
             ax.set_title(names[k])
             ax.set_ylabel("$F_{V}$/$F_{m}$")
-            ax.set_xlabel("Time [Minutes]")
+            ax.set_xlabel("Time [minutes]")
             ax.set_ylim(ylim)
             ax.set_xlim(xlim)
             subyields = [trim_yield[3:] for trim_yield in subyields]
@@ -629,34 +666,34 @@ class PAMalysis:
             avg_errors.append(avg_error)
             avg_sizes.append(pop_size)
             for index, part in enumerate(subyields):
-                ax.plot(range(xlim[0], xlim[1], self.settings['intervall']), part,
+                ax.plot(range(xlim[0], xlim[1], self.settings['Intervall']), part,
                         marker='o', markersize=3, linewidth=0.5, color=cmap(norm(part[-1])))
             plt.yticks(np.arange(ylim[0], ylim[1], 0.1), labels=None)
             plt.xticks(np.arange(0, xlim[1], step=xstep))
+            ax.tick_params(which='major', width=1.2,length=6)
+            ax.tick_params(which='minor', width=0.75,length=2.5)
             ax.xaxis.set_major_locator(MultipleLocator(xstep))
             ax.xaxis.set_minor_locator(MultipleLocator(xstep/5))
             plt.minorticks_on()
             plt.grid(axis="y")
 
-        #fig.tight_layout(pad = 3.0)
         fig.savefig(
             fname=f"{self.output_folder}/{jobname}_{subjob}_total_yields")
 
         cmap = plt.cm.get_cmap("viridis")
-        #norm = mcolors.Normalize(vmin=ylim[0]+0.2,vmax=0.5)
         norm = mcolors.Normalize(vmin=0, vmax=self.no_files-1)
         fig2 = plt.figure(f"{jobname} Average FvFm", figsize=[12, 10])
-        #fig2.suptitle(f"{jobname}: Average "+"$F_{V}$/$F_{m}$.")
         ax = plt.subplot(111)
         plt.ylabel("$F_{V}$/$F_{m}$")
-        plt.xlabel("Time [Minutes]")
+        plt.xlabel("Time [minutes]")
         plt.xlim(xlim)
         plt.ylim(ylim)
         plt.yticks(np.arange(ylim[0], ylim[1], step=(
             ylim[1]-ylim[0])/7), labels=None)
         plt.xticks(np.arange(0, xlim[1], step=xstep))
         plt.minorticks_on()
-
+        ax.tick_params(which='major', width=1.2,length=6)
+        ax.tick_params(which='minor', width=0.75,length=2.5)
         ax.xaxis.set_major_locator(MultipleLocator(xstep))
         ax.xaxis.set_minor_locator(MultipleLocator(xstep/5))
         plt.grid(True, axis="y")
@@ -666,16 +703,16 @@ class PAMalysis:
         opac = 0.75
         for idx, avgs in enumerate(avg_lines):
             if(legends and errorbars):
-                ax.errorbar(range(xlim[0], xlim[1], self.settings['intervall']), avgs, yerr=avg_errors[idx], color=cmap(norm(
+                ax.errorbar(range(xlim[0], xlim[1], self.settings['Intervall']), avgs, yerr=avg_errors[idx], color=cmap(norm(
                     subjob)), label=f"{filename}, " + f"n(cells)= {str().join([s for s in names[idx][3:12] if s.isdigit()])}", markersize=msize, marker='o', linewidth=lw, capsize=2, elinewidth=elw, errorevery=(1+subjob, self.no_files), alpha=opac)
             elif(errorbars):
-                ax.errorbar(range(xlim[0], xlim[1], self.settings['intervall']), avgs, yerr=avg_errors[idx], color=cmap(norm(
+                ax.errorbar(range(xlim[0], xlim[1], self.settings['Intervall']), avgs, yerr=avg_errors[idx], color=cmap(norm(
                     subjob)), markersize=msize, marker='o', linewidth=lw, capsize=2, elinewidth=elw, errorevery=(1+subjob, self.no_files), alpha=opac)
             elif(legends):
-                ax.plot(range(xlim[0], xlim[1], self.settings['intervall']), avgs, color=cmap(norm(
+                ax.plot(range(xlim[0], xlim[1], self.settings['Intervall']), avgs, color=cmap(norm(
                     avgs[-1])), label=f"{filename}, " + f"n(cells)= {str().join([s for s in names[idx][3:12] if s.isdigit()])}", markersize=msize, marker='o', linewidth=lw, alpha=opac)
             else:
-                ax.plot(range(xlim[0], xlim[1], self.settings['intervall']), avgs, color=cmap(
+                ax.plot(range(xlim[0], xlim[1], self.settings['Intervall']), avgs, color=cmap(
                     norm(avgs[-1])), markersize=msize, marker='o', linewidth=lw, alpha=opac)
 
         self.figures[f"{jobname}_{subjob}_total_yields"] = fig
@@ -688,12 +725,8 @@ class PAMalysis:
         plt.ylabel("Count [cells]")
         plt.minorticks_on()
         plt.grid(visible=True, which='major', axis="y")
-        #plt.axes().xaxis.set_tick_params(which='minor', right = 'off')
-        # yield_bins=np.linspace(self.settings['floor'],0.7,num=(round((0.7-self.settings['floor'])/0.05)+1))
-        #below = len([i for i in yields if i <= self.settings['floor']])
         yield_bins = np.linspace(0, 0.7, num=(round((0.7)/0.05)+1))
         yields = np.asarray(yields)
-        #yields = yields[(yields>=self.settings['floor'])]
         avg = np.mean(yields)
         arr = plt.hist(yields, bins=yield_bins, alpha=0.7, label=f"n: {len(yields)}. T: {time_point} mins. Mean: {avg:.3f}",
                        edgecolor=i_color, align="mid", fill=False, orientation="vertical", hatch=hatch_char)
@@ -743,7 +776,6 @@ class PAMalysis:
                             (cps[idx][0]-cps[jdx][0])**2 + (cps[idx][1]-cps[jdx][1])**2)
                         if (cpdist <= self.settings['cell_dist']):
                             # Discard
-                            #print(f"{cpdist}. {idx}:{cps[idx]} , {jdx}:{cps[jdx]}")
                             discardlist.append(idx)
             print(f"Removing {len(discardlist)} contours due to proximity.")
             dist_filtered_cnts = [i for j, i in enumerate(cnts) if j not in frozenset(discardlist)]
@@ -756,20 +788,21 @@ class PAMalysis:
         cent_dist = []
         for cnt in dist_filtered_cnts:
             mu = cv2.moments(cnt)
-            if(mu['m00'] > self.settings['minsize'] and mu['m00'] < self.settings['maxsize']):
+            if(mu['m00'] > self.settings['Minsize'] and mu['m00'] < self.settings['Maxsize']):
                 x, y, w, h = cv2.boundingRect(cnt)
-                maxY = self.imgheight-self.settings['border']
-                maxX = self.imgwidth-self.settings['border']*2
-                minX = self.settings['border']*2
-                minY = self.settings['border']
-                if(x+self.settings['border']*2 > minX and x+w+self.settings['border']*2 < maxX and y+self.settings['border'] > minY and y+h+self.settings['border'] < maxY):
+                maxY = self.imgheight-self.settings['Border']
+                maxX = self.imgwidth-self.settings['Border']*2
+                minX = self.settings['Border']*2
+                minY = self.settings['Border']
+                if(x+self.settings['Border']*2 > minX and x+w+self.settings['Border']*2 < maxX and 
+                   y+self.settings['Border'] > minY and y+h+self.settings['Border'] < maxY):
                     size_filtered_cnts.append(cnt)
                     cntX = (x+w/2)-((maxX-minX)/2)
                     cntY = (y+h/2)-((maxY-minY)/2)
                     cent_dist.append(np.linalg.norm([cntX, cntY]))
 
         print(
-            f"Contours remaining after filtering with size thresholds: {self.settings['minsize']}-{self.settings['maxsize']} pixels are {len(size_filtered_cnts)}")
+            f"Contours remaining after filtering with size thresholds: {self.settings['Minsize']}-{self.settings['Maxsize']} pixels are {len(size_filtered_cnts)}")
         # Filter if there are too many contours
         while(len(size_filtered_cnts) > self.settings['cell_limit']):
             rmdist = max(cent_dist)
@@ -851,9 +884,7 @@ class PAMalysis:
             ntile_size = int(cellyields.shape[0]*threshold_size)-1
             #Theoretically: ntile_size = int(cellyields.shape[0]*(1-floor)*threshold_size)-1
             #Sort based on self.settings['sorting_pos'] value
-            cellyields = cellyields[cellyields[:,
-                                               self.settings['sorting_pos']+base].argsort()]
-            #Theoretically: cellyields = cellyields[:cellyields[floor*cellyields.shape[0]:-1,self.settings['sorting_pos']+base].argsort()]
+            cellyields = cellyields[cellyields[:,self.settings['sorting_pos']+base].argsort()]
             sortedYields = cellyields
             for idx in range(0, int(1/threshold_size)):
                 subpops.append(cellyields[0:ntile_size])
@@ -986,6 +1017,7 @@ def create_Masks_Ft(imgstack, maskthres=0.048):
         src = np.array(Fo[i])
         ret, img = cv2.threshold(src, int(threshold), 1, cv2.THRESH_BINARY)
         th.append(cv2.medianBlur(img, 3))
+        #th.append(img)
     mask = np.sum(th, axis=0)
     mask[mask > 0] = 1
     mask = mask.astype(np.uint8)
@@ -1003,9 +1035,9 @@ global outputdata
 parser = argparse.ArgumentParser(
     description="PAMalysis: A Python analysis script for analysing Microscopy-IPAM tif images. Made by Olle Pontén, Uppsala University 2021. GPL license v3.")
 parser.add_argument('ProjectName', type=str, help="Project/output name")
-parser.add_argument('-PAMSet', '--PS', dest='PAMSet', type=str,
+parser.add_argument('-PAMSet', '--P', dest='PAMSet', type=str,
                     default="PAMset.txt", help="Path/Name of PAMset file")
-parser.add_argument('-FilePath', '--FP', dest='proj_fp',
+parser.add_argument('-Filepath', '--FP', dest='proj_fp',
                     help="Name of data file or data folder(if batch mode enabled). If batch mode is on and this argument is empty PAMalysis will analyse current folder.", default=None)
 parser.add_argument('-batch', '--b', dest='batch_flag',
                     action='store_true', help="Enable batch mode")
